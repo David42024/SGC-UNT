@@ -1,0 +1,61 @@
+{
+  "name": "SGC-UNT: Seguimiento CAPA y Vencimientos",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 7 * * 1" }] }
+      },
+      "id": "trigger-semanal",
+      "name": "Revisión semanal (lunes 7am)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SGC_API_URL}}/acciones?estado=abierto",
+        "options": {}
+      },
+      "id": "get-capa",
+      "name": "Obtener CAPA abiertas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SGC_API_URL}}/auditorias?estado=planificado",
+        "options": {}
+      },
+      "id": "get-auditorias",
+      "name": "Obtener auditorías planificadas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const hoy = new Date();\nconst diasLimite = 7;\nconst capa = $('Obtener CAPA abiertas').first().json.datos || [];\nconst proximas = capa.filter(nc => {\n  if (!nc.fecha_limite) return false;\n  const limite = new Date(nc.fecha_limite);\n  const diff = (limite - hoy) / (1000 * 60 * 60 * 24);\n  return diff <= diasLimite && diff >= 0;\n});\nreturn [{ json: { proximas_vencer: proximas.length, items: proximas } }];"
+      },
+      "id": "filtrar-vencimientos",
+      "name": "Filtrar próximos a vencer (7 días)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    }
+  ],
+  "connections": {
+    "Revisión semanal (lunes 7am)": {
+      "main": [
+        [{ "node": "Obtener CAPA abiertas", "type": "main", "index": 0 }],
+        [{ "node": "Obtener auditorías planificadas", "type": "main", "index": 0 }]
+      ]
+    },
+    "Obtener CAPA abiertas": {
+      "main": [[{ "node": "Filtrar próximos a vencer (7 días)", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "timezone": "America/Lima" },
+  "tags": [{ "name": "SGC-UNT" }, { "name": "CAPA" }, { "name": "Vencimientos" }]
+}

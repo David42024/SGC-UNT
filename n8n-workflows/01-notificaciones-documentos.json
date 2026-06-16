@@ -1,0 +1,77 @@
+{
+  "name": "SGC-UNT: Notificaciones de Documentos",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sgc-documento-estado",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-doc",
+      "name": "Webhook Cambio Estado Documento",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"estado_nuevo\"]}}",
+              "operation": "equal",
+              "value2": "revision"
+            }
+          ]
+        }
+      },
+      "id": "if-revision",
+      "name": "¿Requiere revisión?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SGC_API_URL}}/documentos/{{$json[\"documento_id\"]}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-doc",
+      "name": "Obtener datos documento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"procesado\": true, \"accion\": \"notificacion_enviada\"}"
+      },
+      "id": "response",
+      "name": "Respuesta OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Cambio Estado Documento": {
+      "main": [[{ "node": "¿Requiere revisión?", "type": "main", "index": 0 }]]
+    },
+    "¿Requiere revisión?": {
+      "main": [
+        [{ "node": "Obtener datos documento", "type": "main", "index": 0 }],
+        [{ "node": "Respuesta OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Obtener datos documento": {
+      "main": [[{ "node": "Respuesta OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "timezone": "America/Lima" },
+  "tags": [{ "name": "SGC-UNT" }, { "name": "Documentos" }]
+}

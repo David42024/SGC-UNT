@@ -1,0 +1,17 @@
+{
+  "name": "sgc-unt",
+  "version": "1.0.0",
+  "description": "Sistema de Gestión de la Calidad - Universidad Nacional de Trujillo",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "db:test": "cd backend && node database/test-connection.js",
+    "db:setup": "cd backend && node database/setup.js",
+    "db:reset": "cd backend && node database/reset.js",
+    "db:migrate": "cd backend && node database/migrate.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

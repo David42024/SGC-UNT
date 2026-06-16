@@ -1,0 +1,123 @@
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL 16 ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sgc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       sgc_unt
+      POSTGRES_USER:     sgc_user
+      POSTGRES_PASSWORD: sgc_pass_2024
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgc_user -d sgc_unt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sgc_net
+
+  # ── Backend API (Node.js + Express) ─────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sgc_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV:      production
+      PORT:          4000
+      DB_HOST:       postgres
+      DB_PORT:       5432
+      DB_NAME:       sgc_unt
+      DB_USER:       sgc_user
+      DB_PASSWORD:   sgc_pass_2024
+      JWT_SECRET:    sgc_unt_jwt_super_secreto_2024_cambiar_en_produccion
+      JWT_EXPIRA:    8h
+      FRONTEND_URL:  http://localhost:3000
+      LOG_LEVEL:     info
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    ports:
+      - "4000:4000"
+    networks:
+      - sgc_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Frontend (Next.js 14) ────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sgc_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api
+    ports:
+      - "3000:3000"
+    networks:
+      - sgc_net
+
+  # ── n8n Workflow Automation ──────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: sgc_n8n
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER:   admin
+      N8N_BASIC_AUTH_PASSWORD: n8n_sgc_2024
+      N8N_HOST:              0.0.0.0
+      N8N_PORT:              5678
+      N8N_PROTOCOL:          http
+      WEBHOOK_URL:           http://localhost:5678
+      DB_TYPE:               postgresdb
+      DB_POSTGRESDB_HOST:    postgres
+      DB_POSTGRESDB_PORT:    5432
+      DB_POSTGRESDB_DATABASE: n8n_sgc
+      DB_POSTGRESDB_USER:    sgc_user
+      DB_POSTGRESDB_PASSWORD: sgc_pass_2024
+      GENERIC_TIMEZONE:      America/Lima
+      TZ:                    America/Lima
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/.n8n/workflows
+    ports:
+      - "5678:5678"
+    networks:
+      - sgc_net
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+  logs_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+networks:
+  sgc_net:
+    driver: bridge

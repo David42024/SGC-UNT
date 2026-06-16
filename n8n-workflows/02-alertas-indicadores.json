@@ -1,0 +1,83 @@
+{
+  "name": "SGC-UNT: Alertas de Indicadores",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "minutesInterval": 24 }] }
+      },
+      "id": "trigger-diario",
+      "name": "Verificación diaria de indicadores",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SGC_API_URL}}/indicadores/alertas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-alertas",
+      "name": "Obtener alertas pendientes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"datos\"].length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "if-hay-alertas",
+      "name": "¿Hay alertas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alertas = $input.first().json.datos;\nconst resumen = alertas.map(a => `• [${a.tipo_alerta.toUpperCase()}] ${a.indicador_nombre}: ${a.mensaje}`).join('\\n');\nreturn [{ json: { resumen, total: alertas.length } }];"
+      },
+      "id": "format-alertas",
+      "name": "Formatear resumen de alertas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No hay alertas pendientes - registrar en log\nconsole.log('SGC-UNT: Sin alertas pendientes', new Date().toISOString());\nreturn [];"
+      },
+      "id": "no-alertas",
+      "name": "Sin alertas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Verificación diaria de indicadores": {
+      "main": [[{ "node": "Obtener alertas pendientes", "type": "main", "index": 0 }]]
+    },
+    "Obtener alertas pendientes": {
+      "main": [[{ "node": "¿Hay alertas?", "type": "main", "index": 0 }]]
+    },
+    "¿Hay alertas?": {
+      "main": [
+        [{ "node": "Formatear resumen de alertas", "type": "main", "index": 0 }],
+        [{ "node": "Sin alertas", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "timezone": "America/Lima" },
+  "tags": [{ "name": "SGC-UNT" }, { "name": "Indicadores" }]
+}
