@@ -22,6 +22,27 @@ CREATE TABLE IF NOT EXISTS roles (
 );
 COMMENT ON TABLE roles IS 'Roles del sistema: admin, auditor, usuario, solo_lectura';
 
+-- Tabla de permisos
+CREATE TABLE IF NOT EXISTS permisos (
+    id          SERIAL PRIMARY KEY,
+    codigo      VARCHAR(50)  NOT NULL UNIQUE,
+    descripcion TEXT,
+    modulo      VARCHAR(30)  NOT NULL,
+    activo      BOOLEAN      NOT NULL DEFAULT TRUE,
+    creado_en   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+COMMENT ON TABLE permisos IS 'Permisos granulares del sistema por módulo y acción';
+
+-- Tabla intermedia roles-permisos
+CREATE TABLE IF NOT EXISTS roles_permisos (
+    rol_id      INTEGER      NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permiso_id  INTEGER      NOT NULL REFERENCES permisos(id) ON DELETE CASCADE,
+    creado_en   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (rol_id, permiso_id)
+);
+COMMENT ON TABLE roles_permisos IS 'Asignación de permisos a roles';
+
 INSERT INTO roles (nombre, descripcion) VALUES
   ('admin',         'Administrador con acceso total al sistema'),
   ('auditor',       'Auditor interno con acceso a módulos de auditoría'),
@@ -725,5 +746,45 @@ VALUES
   ('MAC-001', 'Gestión Estratégica', 'Macroproceso de dirección institucional', 1, 'macroproceso', 1, 'Definir y ejecutar el plan estratégico', 'Plan estratégico anterior', 'Plan estratégico aprobado'),
   ('MAC-002', 'Formación Académica', 'Macroproceso de enseñanza-aprendizaje', 2, 'macroproceso', 1, 'Formar profesionales de calidad', 'Estudiantes admitidos', 'Profesionales egresados')
 ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- INDICADORES REALES UNT (DP-OC-001, Versión 02)
+-- ============================================================
+
+-- OEI.01: Calidad de formación de egresados
+INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida, meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, activo) VALUES
+  ('IND-OEI01-01', 'Objetivo Educacional Óptimo', 'Porcentaje de egresados que obtienen un nivel óptimo de logro de los objetivos educacionales', 'general', 'porcentaje', '(N° de egresados que cumplen con el Nivel Óptimo de los Objetivos Educacionales / N° Total de Estudiantes Egresados) × 100', '%', 85.00, 70.00, 50.00, 'anual', 1, TRUE),
+  ('IND-OEI01-02', 'Inserción Laboral General', 'Porcentaje de egresados que se encuentran laborando actualmente según carrera profesional', 'general', 'porcentaje', '(N° de Egresados que se encuentran laborando actualmente según su Carrera Profesional / N° Total de Egresados) × 100', '%', 80.00, 60.00, 40.00, 'anual', 1, TRUE),
+  ('IND-OEI01-03', 'Inserción Laboral Acorde al Perfil', 'Porcentaje de egresados que se encuentran laborando de acuerdo a su formación profesional, su perfil, cargo que ocupa, remunerado acorde al mercado nacional', 'general', 'porcentaje', '(N° de Egresados que se encuentran laborando de acuerdo a su formación profesional, su perfil, cargo que ocupa, y remunerado de acuerdo al mercado nacional / N° Total de Egresados por promoción) × 100', '%', 75.00, 55.00, 35.00, 'anual', 1, TRUE)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- OEI.02: Investigación, patentes y emprendimiento
+INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida, meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, activo) VALUES
+  ('IND-OEI02-01', 'Publicaciones de Alto Impacto', 'Porcentaje de publicaciones académicas en revistas de alto impacto', 'general', 'porcentaje', '(N° Total de publicaciones académicas en revistas de alto impacto / N° Total de Publicaciones académicas desarrolladas) × 100', '%', 30.00, 20.00, 10.00, 'anual', 1, TRUE),
+  ('IND-OEI02-02', 'Patentes Registradas', 'Porcentaje de patentes registradas', 'general', 'porcentaje', '(N° Total de patentes registradas / N° Total de Patentes propuestas) × 100', '%', 60.00, 40.00, 20.00, 'anual', 1, TRUE),
+  ('IND-OEI02-03', 'Nuevos Emprendimientos', 'Porcentaje de nuevos emprendimientos registrados', 'general', 'porcentaje', '(N° Total de Emprendimientos nuevos Registrados / N° Total de Emprendimientos nuevos planteados) × 100', '%', 70.00, 50.00, 30.00, 'anual', 1, TRUE)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- OEI.03: Extensión cultural y responsabilidad social
+INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida, meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, activo) VALUES
+  ('IND-OEI03-01', 'Proyectos Implementados', 'Porcentaje de proyectos de extensión cultural, proyección y responsabilidad social y ambiental en la comunidad universitaria y sociedad implementados', 'general', 'porcentaje', '(N° Total de Proyectos de Extensión Cultural, proyección y Responsabilidad Social y ambiental implementados / N° Total de Proyectos de Extensión Cultural, proyección y Responsabilidad Social y ambiental programados) × 100', '%', 90.00, 75.00, 50.00, 'anual', 1, TRUE),
+  ('IND-OEI03-02', 'Proyectos Evaluados', 'Porcentaje de proyectos de extensión cultural, proyección y responsabilidad social y ambiental en la comunidad universitaria y sociedad evaluados', 'general', 'porcentaje', '(N° Total de Proyectos de Extensión Cultural, proyección y Responsabilidad Social y ambiental evaluados / N° Total de Proyectos de Extensión Cultural, proyección y Responsabilidad Social y ambiental programados) × 100', '%', 95.00, 80.00, 60.00, 'anual', 1, TRUE)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- OEI.04: Gobernanza institucional y presupuesto
+INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida, meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, activo) VALUES
+  ('IND-OEI04-01', 'Eficacia del PEI', 'Eficacia del PEI en relación al cumplimiento de los objetivos estratégicos institucionales', 'general', 'porcentaje', '(N° total de objetivos estratégicos institucionales logrados / N° Total de objetivos estratégicos institucionales planteados) × 100', '%', 90.00, 75.00, 50.00, 'anual', 1, TRUE),
+  ('IND-OEI04-02', 'Ejecución del Presupuesto', 'Porcentaje de ejecución del presupuesto Institucional', 'general', 'porcentaje', '(Monto Total del Girado del presupuesto institucional / Monto Total del PIM) × 100', '%', 95.00, 85.00, 70.00, 'anual', 1, TRUE)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- OEI.05: Gestión de riesgos y continuidad operativa
+INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida, meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, activo) VALUES
+  ('IND-OEI05-01', 'Gestión de Riesgos y Continuidad', 'Porcentaje de avance en la implementación del Sistema de Gestión de riesgos y continuidad operativa institucional', 'general', 'porcentaje', '(N° Total de Acciones Ejecutadas para la Implementación del Sistema de Gestión de Riesgos y Continuidad Operativa / N° Total de Acciones Programadas para la Implementación del Sistema de Gestión de Riesgos y Continuidad Operativa) × 100', '%', 100.00, 80.00, 60.00, 'trimestral', 1, TRUE)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- OC.01: Satisfacción de estudiantes
+INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida, meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, activo) VALUES
+  ('IND-OC01-01', 'Satisfacción Estudiantil', 'Porcentaje de estudiantes satisfechos con los servicios brindados por la UNT', 'satisfaccion', 'porcentaje', '(Número de estudiantes satisfechos y muy satisfechos con los servicios brindados por la Universidad Nacional de Trujillo / Número total de estudiantes encuestados) × 100', '%', 85.00, 70.00, 50.00, 'trimestral', 1, TRUE)
+ON CONFLICT (codigo) DO NOTHING;
 
 COMMIT;

@@ -6,7 +6,7 @@ import { useAuth } from '../../lib/auth';
 import {
   LayoutDashboard, FileText, GitBranch, Award, ClipboardCheck,
   AlertTriangle, Shield, BarChart2, Star, Users, LogOut,
-  Menu, X, ChevronRight, Bell
+  Menu, X, ChevronRight, Bell, User
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -21,6 +21,7 @@ const MODULOS = [
   { href: '/indicadores',   icon: BarChart2,         label: 'Indicadores' },
   { href: '/satisfaccion',  icon: Star,              label: 'Satisfacción' },
   { href: '/usuarios',      icon: Users,             label: 'Usuarios', soloAdmin: true },
+  { href: '/perfil',        icon: User,              label: 'Perfil' },
 ];
 
 export default function DashboardLayout({ children }) {

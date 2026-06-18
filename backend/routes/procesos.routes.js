@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/procesos.controller');
-const { verificarToken, noSoloLectura, soloAdmin } = require('../middleware/auth.middleware');
+const { verificarToken, tienePermiso, cargarPermisosUsuario } = require('../middleware/auth.middleware');
 
 router.use(verificarToken);
+router.use(cargarPermisosUsuario);
 
 router.get('/',              ctrl.listar);
 router.get('/tipos',         ctrl.listarTipos);
@@ -12,12 +13,12 @@ router.get('/:id',           ctrl.obtener);
 router.get('/:id/pdf',       ctrl.generarPDF);
 router.get('/:id/actividades', ctrl.listarActividades);
 
-router.post('/',             noSoloLectura, ctrl.crear);
-router.put('/:id',           noSoloLectura, ctrl.actualizar);
-router.delete('/:id',        soloAdmin, ctrl.eliminar);
+router.post('/',             tienePermiso('procesos.crear'), ctrl.crear);
+router.put('/:id',           tienePermiso('procesos.editar'), ctrl.actualizar);
+router.delete('/:id',        tienePermiso('procesos.eliminar'), ctrl.eliminar);
 
-router.post('/:id/actividades',       noSoloLectura, ctrl.crearActividad);
-router.put('/:id/actividades/:actId', noSoloLectura, ctrl.actualizarActividad);
-router.delete('/:id/actividades/:actId', soloAdmin, ctrl.eliminarActividad);
+router.post('/:id/actividades',       tienePermiso('procesos.crear'), ctrl.crearActividad);
+router.put('/:id/actividades/:actId', tienePermiso('procesos.editar'), ctrl.actualizarActividad);
+router.delete('/:id/actividades/:actId', tienePermiso('procesos.eliminar'), ctrl.eliminarActividad);
 
 module.exports = router;

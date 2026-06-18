@@ -9,7 +9,8 @@
     "migrate": "node database/migrate.js",
     "db:setup": "node database/setup.js",
     "db:reset": "node database/reset.js",
-    "db:test": "node database/test-connection.js"
+    "db:test": "node database/test-connection.js",
+    "sync:permisos": "node database/sync-permisos.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
