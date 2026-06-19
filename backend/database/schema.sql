@@ -601,6 +601,7 @@ CREATE TABLE IF NOT EXISTS mediciones_indicador (
     observaciones   TEXT,
     fecha_medicion  DATE         NOT NULL DEFAULT CURRENT_DATE,
     aprobado_por    INTEGER      REFERENCES usuarios(id) ON DELETE SET NULL,
+    parametros      JSONB,
     creado_en       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     actualizado_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     creado_por      INTEGER      REFERENCES usuarios(id) ON DELETE SET NULL,
@@ -608,6 +609,22 @@ CREATE TABLE IF NOT EXISTS mediciones_indicador (
 );
 CREATE INDEX IF NOT EXISTS idx_mediciones_indicador_id ON mediciones_indicador(indicador_id);
 CREATE INDEX IF NOT EXISTS idx_mediciones_periodo      ON mediciones_indicador(periodo);
+
+CREATE TABLE IF NOT EXISTS parametros_indicador (
+    id              SERIAL PRIMARY KEY,
+    indicador_id    INTEGER      NOT NULL REFERENCES indicadores(id) ON DELETE CASCADE,
+    nombre          VARCHAR(100) NOT NULL,
+    etiqueta        VARCHAR(255) NOT NULL,
+    orden           INTEGER      NOT NULL DEFAULT 1,
+    tipo            VARCHAR(20)  NOT NULL DEFAULT 'numero'
+                        CHECK (tipo IN ('numero','texto','fecha')),
+    obligatorio     BOOLEAN      NOT NULL DEFAULT TRUE,
+    activo          BOOLEAN      NOT NULL DEFAULT TRUE,
+    creado_en       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    actualizado_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE(indicador_id, nombre)
+);
+CREATE INDEX IF NOT EXISTS idx_parametros_indicador_id ON parametros_indicador(indicador_id);
 
 CREATE TABLE IF NOT EXISTS alertas_indicador (
     id              SERIAL PRIMARY KEY,
@@ -786,5 +803,42 @@ ON CONFLICT (codigo) DO NOTHING;
 INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida, meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, activo) VALUES
   ('IND-OC01-01', 'Satisfacción Estudiantil', 'Porcentaje de estudiantes satisfechos con los servicios brindados por la UNT', 'satisfaccion', 'porcentaje', '(Número de estudiantes satisfechos y muy satisfechos con los servicios brindados por la Universidad Nacional de Trujillo / Número total de estudiantes encuestados) × 100', '%', 85.00, 70.00, 50.00, 'trimestral', 1, TRUE)
 ON CONFLICT (codigo) DO NOTHING;
+
+-- Parámetros de indicadores
+INSERT INTO parametros_indicador (indicador_id, nombre, etiqueta, orden, tipo, obligatorio) VALUES
+  -- IND-OEI04-01: Eficacia del PEI
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI04-01'), 'objetivos_logrados', 'N° total de objetivos estratégicos institucionales logrados', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI04-01'), 'objetivos_planteados', 'N° Total de objetivos estratégicos institucionales planteados', 2, 'numero', TRUE),
+  -- IND-OEI04-02: Ejecución del Presupuesto
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI04-02'), 'monto_girado', 'Monto Total del Girado del presupuesto institucional', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI04-02'), 'monto_pim', 'Monto Total del PIM', 2, 'numero', TRUE),
+  -- IND-OEI01-01: Objetivo Educacional Óptimo
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI01-01'), 'egresados_cumplen', 'N° de egresados que cumplen con el Nivel Óptimo de los Objetivos Educacionales', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI01-01'), 'total_egresados', 'N° Total de Estudiantes Egresados', 2, 'numero', TRUE),
+  -- IND-OEI01-02: Inserción Laboral General
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI01-02'), 'egresados_laborando', 'N° de Egresados que se encuentran laborando actualmente según su Carrera Profesional', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI01-02'), 'total_egresados', 'N° Total de Egresados', 2, 'numero', TRUE),
+  -- IND-OEI01-03: Inserción Laboral Acorde al Perfil
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI01-03'), 'egresados_acorde', 'N° de Egresados que se encuentran laborando de acuerdo a su formación profesional, su perfil, cargo que ocupa, y remunerado de acuerdo al mercado nacional', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI01-03'), 'total_egresados_promocion', 'N° Total de Egresados por promoción', 2, 'numero', TRUE),
+  -- IND-OEI02-01: Publicaciones de Alto Impacto
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI02-01'), 'publicaciones_alto_impacto', 'N° Total de publicaciones académicas en revistas de alto impacto', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI02-01'), 'total_publicaciones', 'N° Total de Publicaciones académicas desarrolladas', 2, 'numero', TRUE),
+  -- IND-OEI02-02: Patentes Registradas
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI02-02'), 'patentes_registradas', 'N° Total de patentes registradas', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI02-02'), 'patentes_propuestas', 'N° Total de Patentes propuestas', 2, 'numero', TRUE),
+  -- IND-OEI02-03: Nuevos Emprendimientos
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI02-03'), 'emprendimientos_registrados', 'N° Total de Emprendimientos nuevos Registrados', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI02-03'), 'emprendimientos_planteados', 'N° Total de Emprendimientos nuevos planteados', 2, 'numero', TRUE),
+  -- IND-OEI03-02: Proyectos Evaluados
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI03-02'), 'proyectos_evaluados', 'N° Total de Proyectos de Extensión Cultural, proyección y Responsabilidad Social y ambiental evaluados', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI03-02'), 'proyectos_programados', 'N° Total de Proyectos de Extensión Cultural, proyección y Responsabilidad Social y ambiental programados', 2, 'numero', TRUE),
+  -- IND-OEI05-01: Gestión de Riesgos y Continuidad
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI05-01'), 'acciones_ejecutadas', 'N° Total de Acciones Ejecutadas para la Implementación del Sistema de Gestión de Riesgos y Continuidad Operativa', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OEI05-01'), 'acciones_programadas', 'N° Total de Acciones Programadas para la Implementación del Sistema de Gestión de Riesgos y Continuidad Operativa', 2, 'numero', TRUE),
+  -- IND-OC01-01: Satisfacción Estudiantil
+  ((SELECT id FROM indicadores WHERE codigo='IND-OC01-01'), 'estudiantes_satisfechos', 'Número de estudiantes satisfechos y muy satisfechos con los servicios brindados por la Universidad Nacional de Trujillo', 1, 'numero', TRUE),
+  ((SELECT id FROM indicadores WHERE codigo='IND-OC01-01'), 'total_encuestados', 'Número total de estudiantes encuestados', 2, 'numero', TRUE)
+ON CONFLICT (indicador_id, nombre) DO NOTHING;
 
 COMMIT;

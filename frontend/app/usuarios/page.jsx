@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
-import { Users, Plus, Search, Edit, Trash2, RefreshCw, ShieldCheck, UserCheck, UserX } from 'lucide-react';
+import { Users, Plus, Search, Edit, Trash2, RefreshCw, ShieldCheck, UserCheck, UserX, Download } from 'lucide-react';
 import { Badge, CargandoPagina, Modal, ModalConfirmar, EstadoVacio, PageHeader, Campo, StatCard } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
 
@@ -14,11 +14,16 @@ export default function UsuariosPage() {
   const [roles, setRoles]       = useState([]);
   const [cargando, setCargando] = useState(true);
   const [buscar, setBuscar]     = useState('');
+  const [filtroRol, setFiltroRol] = useState('');
+  const [filtroActivo, setFiltroActivo] = useState('');
   const [seleccionado, setSeleccionado] = useState(null);
   const [modalForm, setModalForm]       = useState(false);
   const [modalEliminar, setModalEliminar] = useState(false);
   const [form, setForm]     = useState(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
+  const [pagina, setPagina]           = useState(1);
+  const [limite, setLimite]           = useState(10);
+  const [paginacion, setPaginacion]   = useState(null);
 
   if (usuarioActual?.rol !== 'admin') {
     return (
@@ -35,17 +40,21 @@ export default function UsuariosPage() {
   const cargar = async () => {
     setCargando(true);
     try {
+      const params = { page: pagina, limit: limite };
+      if (filtroActivo !== '') params.activo = filtroActivo;
+      if (filtroRol) params.rol = filtroRol;
       const [usrRes, rolRes] = await Promise.all([
-        api.get('/usuarios'),
+        api.get('/usuarios', { params }),
         api.get('/usuarios/roles'),
       ]);
       setUsuarios(usrRes.data.datos || []);
+      setPaginacion(usrRes.data.paginacion || null);
       setRoles(rolRes.data.datos || []);
     } catch { toast.error('Error al cargar usuarios'); }
     finally  { setCargando(false); }
   };
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => { cargar(); }, [pagina, limite, filtroActivo, filtroRol]);
 
   const filtrados = usuarios.filter(u =>
     !buscar ||
@@ -60,6 +69,8 @@ export default function UsuariosPage() {
   };
 
   const abrirNuevo  = () => { setSeleccionado(null); setForm(FORM_VACIO); setModalForm(true); };
+  const cambiarPagina = (nuevaPagina) => { setPagina(nuevaPagina); };
+  const cambiarLimite = (nuevoLimite) => { setLimite(nuevoLimite); setPagina(1); };
   const abrirEditar = (u) => {
     setSeleccionado(u);
     const rolId = roles.find(r => r.nombre === u.rol)?.id || '';
@@ -81,7 +92,7 @@ export default function UsuariosPage() {
         await api.post('/usuarios', form);
         toast.success('Usuario creado exitosamente');
       }
-      setModalForm(false); cargar();
+      setModalForm(false); setPagina(1); cargar();
     } catch (err) { toast.error(err.response?.data?.mensaje || 'Error al guardar'); }
     finally       { setGuardando(false); }
   };
@@ -91,9 +102,20 @@ export default function UsuariosPage() {
     try {
       await api.delete(`/usuarios/${seleccionado.id}`);
       toast.success('Usuario desactivado');
-      setModalEliminar(false); cargar();
+      setModalEliminar(false); setPagina(1); cargar();
     } catch (err) { toast.error(err.response?.data?.mensaje || 'Error'); }
     finally       { setGuardando(false); }
+  };
+
+  const descargarReporte = async () => {
+    try {
+      const params = {};
+      if (filtroActivo !== '') params.activo = filtroActivo;
+      if (filtroRol) params.rol = filtroRol;
+      const res = await api.get('/usuarios/reporte', { params, responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'reporte-usuarios.pdf'; a.click();
+    } catch { toast.error('Error al generar reporte'); }
   };
 
   const colorRol = (rol) => ({
@@ -109,7 +131,12 @@ export default function UsuariosPage() {
         titulo="Gestión de Usuarios"
         descripcion="Administración de usuarios, roles y permisos del sistema"
         icono={Users}
-        acciones={<button onClick={abrirNuevo} className="btn-primario"><Plus size={16} />Nuevo usuario</button>}
+        acciones={
+          <div className="flex items-center gap-2">
+            <button onClick={descargarReporte} className="btn-secundario"><Download size={16} />Generar reporte</button>
+            <button onClick={abrirNuevo} className="btn-primario"><Plus size={16} />Nuevo usuario</button>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-3 gap-4 mb-5">
@@ -124,6 +151,15 @@ export default function UsuariosPage() {
             <Search size={15} className="absolute left-3 top-2.5 text-gray-400" />
             <input className="campo pl-9" placeholder="Buscar por nombre o correo..." value={buscar} onChange={e => setBuscar(e.target.value)} />
           </div>
+          <select className="campo w-auto" value={filtroActivo} onChange={e => setFiltroActivo(e.target.value)}>
+            <option value="">Todos los estados</option>
+            <option value="true">Activos</option>
+            <option value="false">Inactivos</option>
+          </select>
+          <select className="campo w-auto" value={filtroRol} onChange={e => setFiltroRol(e.target.value)}>
+            <option value="">Todos los roles</option>
+            {roles.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+          </select>
           <button onClick={cargar} className="btn-secundario"><RefreshCw size={15} /></button>
         </div>
       </div>
@@ -133,6 +169,7 @@ export default function UsuariosPage() {
           <EstadoVacio icono={Users} titulo="No hay usuarios" descripcion="Cree el primer usuario del sistema"
             accion={<button onClick={abrirNuevo} className="btn-primario mx-auto"><Plus size={16} />Nuevo usuario</button>} />
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -187,6 +224,27 @@ export default function UsuariosPage() {
               </tbody>
             </table>
           </div>
+          {/* Paginación */}
+          {paginacion && paginacion.totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Mostrar</span>
+                <select className="campo w-auto py-1 text-sm" value={limite} onChange={e => cambiarLimite(parseInt(e.target.value))}>
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+                <span className="text-sm text-gray-600">por página</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => cambiarPagina(pagina - 1)} disabled={!paginacion.hasPrev} className="px-3 py-1 text-sm border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
+                <span className="text-sm text-gray-600">Página {paginacion.page} de {paginacion.totalPages} ({paginacion.total} total)</span>
+                <button onClick={() => cambiarPagina(pagina + 1)} disabled={!paginacion.hasNext} className="px-3 py-1 text-sm border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">Siguiente</button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
 
