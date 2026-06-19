@@ -47,12 +47,12 @@ const listar = async (req, res) => {
 
 const dashboard = async (req, res) => {
   try {
-    const [resumen, ultimasMediciones, alertasPendientes] = await Promise.all([
+    const [resumen, ultimasMediciones, alertasPendientes, porModulo, porSemaforo, tendencias] = await Promise.all([
       consulta(`SELECT
                   COUNT(*) FILTER (WHERE activo=true) AS total_activos,
                   COUNT(*) FILTER (WHERE NOT activo) AS total_inactivos
                 FROM indicadores`),
-      consulta(`SELECT i.nombre, i.modulo, i.unidad_medida, i.meta,
+      consulta(`SELECT i.id, i.nombre, i.modulo, i.unidad_medida, i.meta,
                   mi.valor, mi.estado_semaforo, mi.periodo, mi.fecha_medicion
                 FROM mediciones_indicador mi
                 JOIN indicadores i ON i.id=mi.indicador_id
@@ -61,9 +61,33 @@ const dashboard = async (req, res) => {
                 ) ORDER BY mi.estado_semaforo DESC, i.nombre`),
       consulta(`SELECT ai.*, i.nombre AS indicador_nombre
                 FROM alertas_indicador ai JOIN indicadores i ON i.id=ai.indicador_id
-                WHERE ai.enviada=false ORDER BY ai.fecha_alerta DESC LIMIT 10`)
+                WHERE ai.enviada=false ORDER BY ai.fecha_alerta DESC LIMIT 10`),
+      consulta(`SELECT modulo, COUNT(*) AS total
+                FROM indicadores WHERE activo=true
+                GROUP BY modulo ORDER BY total DESC`),
+      consulta(`SELECT mi.estado_semaforo, COUNT(*) AS total
+                FROM mediciones_indicador mi
+                WHERE mi.id IN (
+                  SELECT DISTINCT ON (indicador_id) id FROM mediciones_indicador ORDER BY indicador_id, fecha_medicion DESC, id DESC
+                )
+                GROUP BY mi.estado_semaforo`),
+      consulta(`SELECT i.nombre, i.modulo, mi.valor, mi.estado_semaforo, mi.periodo, mi.fecha_medicion
+                FROM mediciones_indicador mi
+                JOIN indicadores i ON i.id=mi.indicador_id
+                WHERE mi.fecha_medicion >= NOW() - INTERVAL '6 months'
+                ORDER BY mi.fecha_medicion DESC LIMIT 50`)
     ]);
-    res.json({ exito: true, datos: { resumen: resumen.rows[0], ultimas_mediciones: ultimasMediciones.rows, alertas_pendientes: alertasPendientes.rows } });
+    res.json({ 
+      exito: true, 
+      datos: { 
+        resumen: resumen.rows[0], 
+        ultimas_mediciones: ultimasMediciones.rows, 
+        alertas_pendientes: alertasPendientes.rows,
+        por_modulo: porModulo.rows,
+        por_semaforo: porSemaforo.rows,
+        tendencias: tendencias.rows
+      } 
+    });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -359,7 +383,8 @@ const generarReporte = async (req, res) => {
               (SELECT mi.valor FROM mediciones_indicador mi WHERE mi.indicador_id=i.id ORDER BY mi.fecha_medicion DESC, mi.id DESC LIMIT 1) AS ultimo_valor,
               (SELECT mi.estado_semaforo FROM mediciones_indicador mi WHERE mi.indicador_id=i.id ORDER BY mi.fecha_medicion DESC, mi.id DESC LIMIT 1) AS semaforo_actual
        FROM indicadores i LEFT JOIN usuarios u ON u.id=i.responsable_id
-       ${where} ORDER BY i.modulo, i.nombre`, params
+       ${where} ORDER BY i.creado_en ASC`,
+      params
     );
 
     const pdfDoc = await PDFDocument.create();
@@ -367,78 +392,244 @@ const generarReporte = async (req, res) => {
     const fN = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     let pagina = pdfDoc.addPage([595, 842]);
-    let y = 800;
     const width = 595;
     const height = 842;
     const AZUL = rgb(0.02, 0.35, 0.65);
     const BLANCO = rgb(1, 1, 1);
+    const NEGRO = rgb(0, 0, 0);
 
     // Encabezado
-    pagina.drawRectangle({ x: 0, y: height - 70, width, height: 70, color: AZUL });
-    pagina.drawText('UNIVERSIDAD NACIONAL DE TRUJILLO', { x: 20, y: height - 35, size: 14, font: fB, color: BLANCO });
-    pagina.drawText('SGC-UNT — REPORTE DE INDICADORES', { x: 20, y: height - 55, size: 10, font: fN, color: rgb(0.8, 0.9, 1) });
+    pagina.drawRectangle({ x: 0, y: height - 60, width, height: 60, color: AZUL });
+    pagina.drawText('REPORTE DE INDICADORES', { x: 20, y: height - 35, size: 16, font: fB, color: BLANCO });
+    pagina.drawText('Sistema de Gestión de Calidad - UNT', { x: 20, y: height - 15, size: 10, font: fN, color: rgb(0.8, 0.9, 1) });
+
+    const fechaReporte = new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' });
+    pagina.drawText(`Fecha: ${fechaReporte}`, { x: 20, y: height - 80, size: 9, font: fN, color: NEGRO });
 
     // Filtros aplicados
-    y -= 50;
-    pagina.drawText('Filtros aplicados:', { x: 20, y, size: 10, font: fB, color: AZUL });
+    let y = 720;
+    pagina.drawText(`Total: ${resultado.rows.length} indicadores`, { x: 20, y, size: 11, font: fB, color: AZUL });
     y -= 15;
-    pagina.drawText(`Módulo: ${modulo || 'Todos'}`, { x: 20, y, size: 9, font: fN, color: rgb(0,0,0) });
-    y -= 12;
-    pagina.drawText(`Estado: ${activo !== undefined ? (activo === 'true' ? 'Activos' : 'Inactivos') : 'Todos'}`, { x: 20, y, size: 9, font: fN, color: rgb(0,0,0) });
-    y -= 12;
-    pagina.drawText(`Total de indicadores: ${resultado.rows.length}`, { x: 20, y, size: 9, font: fN, color: rgb(0,0,0) });
+    
+    const filtros = [];
+    if (modulo) filtros.push(`Módulo: ${modulo}`);
+    if (activo !== undefined) filtros.push(`Estado: ${activo === 'true' ? 'Activos' : 'Inactivos'}`);
+    
+    if (filtros.length > 0) {
+      pagina.drawText(`Filtros aplicados: ${filtros.join(' | ')}`, { x: 20, y, size: 9, font: fN, color: rgb(0.5, 0.5, 0.5) });
+      y -= 20;
+    } else {
+      pagina.drawText(`Filtros: Ninguno (mostrando todos)`, { x: 20, y, size: 9, font: fN, color: rgb(0.5, 0.5, 0.5) });
+      y -= 20;
+    }
 
-    y -= 20;
-    pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
-    pagina.drawText('LISTADO DE INDICADORES', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
-    y -= 25;
-
-    // Encabezado tabla
-    pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 16, color: rgb(0.9, 0.93, 0.98) });
-    pagina.drawText('CÓDIGO', { x: 25, y, size: 8, font: fB, color: AZUL });
-    pagina.drawText('NOMBRE', { x: 90, y, size: 8, font: fB, color: AZUL });
-    pagina.drawText('MÓDULO', { x: 300, y, size: 8, font: fB, color: AZUL });
-    pagina.drawText('ÚLTIMO VALOR', { x: 380, y, size: 8, font: fB, color: AZUL });
-    pagina.drawText('META', { x: 460, y, size: 8, font: fB, color: AZUL });
-    y -= 12;
-
-    // Filas
-    for (const ind of resultado.rows) {
+    // Tabla de indicadores
+    resultado.rows.forEach((ind, i) => {
       if (y < 50) {
         pagina = pdfDoc.addPage([595, 842]);
         y = 800;
-        pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 16, color: rgb(0.9, 0.93, 0.98) });
-        pagina.drawText('CÓDIGO', { x: 25, y, size: 8, font: fB, color: AZUL });
-        pagina.drawText('NOMBRE', { x: 90, y, size: 8, font: fB, color: AZUL });
-        pagina.drawText('MÓDULO', { x: 300, y, size: 8, font: fB, color: AZUL });
-        pagina.drawText('ÚLTIMO VALOR', { x: 380, y, size: 8, font: fB, color: AZUL });
-        pagina.drawText('META', { x: 460, y, size: 8, font: fB, color: AZUL });
-        y -= 12;
       }
-      pagina.drawText(ind.codigo || '—', { x: 25, y, size: 8, font: fN, color: rgb(0,0,0) });
-      pagina.drawText((ind.nombre || '').substring(0, 35), { x: 90, y, size: 8, font: fN, color: rgb(0,0,0) });
-      pagina.drawText(ind.modulo || '—', { x: 300, y, size: 8, font: fN, color: rgb(0,0,0) });
-      pagina.drawText(ind.ultimo_valor != null ? String(ind.ultimo_valor) : '—', { x: 380, y, size: 8, font: fN, color: rgb(0,0,0) });
-      pagina.drawText(`${ind.meta || '—'} ${ind.unidad_medida || ''}`, { x: 460, y, size: 8, font: fN, color: rgb(0,0,0) });
+      
+      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 15, color: AZUL });
+      pagina.drawText(`${ind.codigo} - ${ind.nombre}`, { x: 25, y: y + 2, size: 9, font: fB, color: BLANCO });
+      y -= 20;
+      
+      pagina.drawText(`Módulo: ${ind.modulo} | Responsable: ${ind.responsable_nombre || 'N/A'}`, { x: 25, y, size: 8, font: fN, color: NEGRO });
       y -= 12;
-    }
-
-    // Pie de página
-    const totalPages = pdfDoc.getPageCount();
-    for (let i = 0; i < totalPages; i++) {
-      const p = pdfDoc.getPage(i);
-      p.drawText(`Página ${i + 1} de ${totalPages}`, { x: width - 80, y: 20, size: 8, font: fN, color: rgb(0.5, 0.5, 0.5) });
-      p.drawText(`Generado: ${new Date().toLocaleString('es-PE')}`, { x: 20, y: 20, size: 8, font: fN, color: rgb(0.5, 0.5, 0.5) });
-    }
+      pagina.drawText(`Fórmula: ${ind.formula}`, { x: 25, y, size: 8, font: fN, color: rgb(0.4, 0.4, 0.4) });
+      y -= 12;
+      pagina.drawText(`Último valor: ${ind.ultimo_valor || 'N/A'} | Semáforo: ${ind.semaforo_actual || 'N/A'}`, { x: 25, y, size: 8, font: fN, color: NEGRO });
+      y -= 20;
+    });
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="reporte-indicadores.pdf"');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte-indicadores.pdf"`);
     res.send(Buffer.from(pdfBytes));
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
 };
 
+const generarReporteDashboard = async (req, res) => {
+  try {
+    console.log('Iniciando generación de reporte del dashboard...');
+    
+    // Obtener datos de todo el dashboard
+    const [docs, proc, audits, acciones, riesgos, indicadores, encuestas, usuarios] = await Promise.all([
+      consulta('SELECT COUNT(*) AS total FROM documentos'),
+      consulta('SELECT COUNT(*) AS total FROM procesos WHERE activo=true'),
+      consulta('SELECT COUNT(*) AS total FROM auditorias'),
+      consulta('SELECT COUNT(*) AS total FROM no_conformidades'),
+      consulta('SELECT COUNT(*) AS total FROM riesgos'),
+      consulta('SELECT COUNT(*) FILTER (WHERE activo=true) AS total_activos, COUNT(*) FILTER (WHERE NOT activo) AS total_inactivos FROM indicadores'),
+      consulta('SELECT COUNT(*) AS total FROM encuestas'),
+      consulta('SELECT COUNT(*) AS total FROM usuarios'),
+    ]);
+
+    const [docsEstado, riesgosNivel, indicadoresPorModulo, indicadoresPorSemaforo] = await Promise.all([
+      consulta('SELECT estado, COUNT(*) AS cantidad FROM documentos GROUP BY estado'),
+      consulta('SELECT clasificacion_nivel, COUNT(*) AS cantidad FROM riesgos GROUP BY clasificacion_nivel'),
+      consulta('SELECT modulo, COUNT(*) AS total FROM indicadores WHERE activo=true GROUP BY modulo ORDER BY total DESC'),
+      consulta(`SELECT mi.estado_semaforo, COUNT(*) AS total
+                FROM mediciones_indicador mi
+                WHERE mi.id IN (
+                  SELECT DISTINCT ON (indicador_id) id FROM mediciones_indicador ORDER BY indicador_id, fecha_medicion DESC, id DESC
+                )
+                GROUP BY mi.estado_semaforo`),
+    ]);
+
+    const pdfDoc = await PDFDocument.create();
+    const fB = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fN = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    // PORTADA INSTITUCIONAL
+    let pagina = pdfDoc.addPage([595, 842]);
+    const width = 595;
+    const height = 842;
+    const AZUL = rgb(0.02, 0.35, 0.65);
+    const BLANCO = rgb(1, 1, 1);
+    const NEGRO = rgb(0, 0, 0);
+    const VERDE = rgb(0.06, 0.73, 0.51);
+    const AMARILLO = rgb(0.96, 0.62, 0.04);
+    const ROJO = rgb(0.94, 0.27, 0.27);
+
+    // Encabezado portada
+    pagina.drawRectangle({ x: 0, y: height - 100, width, height: 100, color: AZUL });
+    pagina.drawText('UNIVERSIDAD NACIONAL DE TRUJILLO', { x: 20, y: height - 50, size: 18, font: fB, color: BLANCO });
+    pagina.drawText('SISTEMA DE GESTIÓN DE CALIDAD', { x: 20, y: height - 30, size: 12, font: fN, color: rgb(0.8, 0.9, 1) });
+    pagina.drawText('SGC-UNT', { x: 20, y: height - 15, size: 10, font: fN, color: rgb(0.8, 0.9, 1) });
+
+    // Título del reporte
+    pagina.drawText('REPORTE GENERAL DEL DASHBOARD', { x: 20, y: height - 180, size: 24, font: fB, color: AZUL });
+    pagina.drawText('Sistema de Gestión de Calidad Institucional', { x: 20, y: height - 210, size: 14, font: fN, color: NEGRO });
+
+    const fechaReporte = new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' });
+    pagina.drawText(`Fecha de generación: ${fechaReporte}`, { x: 20, y: height - 250, size: 10, font: fN, color: rgb(0.5, 0.5, 0.5) });
+
+    // PÁGINA 2: RESUMEN EJECUTIVO
+    pagina = pdfDoc.addPage([595, 842]);
+    let y = 800;
+
+    pagina.drawRectangle({ x: 0, y: height - 50, width, height: 50, color: AZUL });
+    pagina.drawText('RESUMEN EJECUTIVO', { x: 20, y: height - 30, size: 14, font: fB, color: BLANCO });
+
+    y -= 70;
+    pagina.drawText('KPIs CLAVE DEL SISTEMA', { x: 20, y, size: 12, font: fB, color: AZUL });
+    y -= 20;
+
+    const stats = {
+      docs: docs.rows[0]?.total || 0,
+      proc: proc.rows[0]?.total || 0,
+      audits: audits.rows[0]?.total || 0,
+      acciones: acciones.rows[0]?.total || 0,
+      riesgos: riesgos.rows[0]?.total || 0,
+      indicadores: indicadores.rows[0]?.total_activos || 0,
+      encuestas: encuestas.rows[0]?.total || 0,
+      usuarios: usuarios.rows[0]?.total || 0,
+    };
+
+    // KPIs en grid
+    const kpis = [
+      { label: 'Documentos', valor: stats.docs },
+      { label: 'Procesos activos', valor: stats.proc },
+      { label: 'Auditorías', valor: stats.audits },
+      { label: 'No conformidades', valor: stats.acciones },
+      { label: 'Riesgos', valor: stats.riesgos },
+      { label: 'Indicadores activos', valor: stats.indicadores },
+      { label: 'Encuestas', valor: stats.encuestas },
+      { label: 'Usuarios', valor: stats.usuarios },
+    ];
+
+    kpis.forEach((kpi, i) => {
+      if (i % 2 === 0 && i > 0) y -= 15;
+      const x = i % 2 === 0 ? 20 : 310;
+      pagina.drawText(`${kpi.label}: ${kpi.valor}`, { x, y, size: 10, font: fN, color: NEGRO });
+      if (i % 2 === 1) y -= 20;
+    });
+
+    y -= 30;
+    pagina.drawLine({ start: { x: 20, y }, end: { x: width - 20, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
+
+    // PÁGINA 3: ESTADO POR MÓDULO
+    pagina = pdfDoc.addPage([595, 842]);
+    y = 800;
+
+    pagina.drawRectangle({ x: 0, y: height - 50, width, height: 50, color: AZUL });
+    pagina.drawText('ESTADO POR MÓDULO', { x: 20, y: height - 30, size: 14, font: fB, color: BLANCO });
+
+    // Documentos por estado
+    if (docsEstado.rows.length > 0) {
+      y -= 70;
+      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
+      pagina.drawText('DOCUMENTOS POR ESTADO', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
+      y -= 25;
+
+      docsEstado.rows.forEach((m, i) => {
+        pagina.drawText(`${m.estado}: ${m.cantidad}`, { x: 30, y, size: 9, font: fN, color: NEGRO });
+        y -= 15;
+      });
+      y -= 20;
+    }
+
+    // Riesgos por nivel
+    if (riesgosNivel.rows.length > 0) {
+      y -= 50;
+      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
+      pagina.drawText('RIESGOS POR NIVEL', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
+      y -= 25;
+
+      riesgosNivel.rows.forEach((s, i) => {
+        pagina.drawText(`${s.clasificacion_nivel}: ${s.cantidad}`, { x: 30, y, size: 9, font: fN, color: NEGRO });
+        y -= 15;
+      });
+    }
+
+    // PÁGINA 4: INDICADORES
+    pagina = pdfDoc.addPage([595, 842]);
+    y = 800;
+
+    pagina.drawRectangle({ x: 0, y: height - 50, width, height: 50, color: AZUL });
+    pagina.drawText('INDICADORES', { x: 20, y: height - 30, size: 14, font: fB, color: BLANCO });
+
+    // Indicadores por módulo
+    if (indicadoresPorModulo.rows.length > 0) {
+      y -= 70;
+      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
+      pagina.drawText('INDICADORES POR MÓDULO', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
+      y -= 25;
+
+      indicadoresPorModulo.rows.forEach((m, i) => {
+        pagina.drawText(`${m.modulo}: ${m.total}`, { x: 30, y, size: 9, font: fN, color: NEGRO });
+        y -= 15;
+      });
+      y -= 20;
+    }
+
+    // Estado de indicadores por semáforo
+    if (indicadoresPorSemaforo.rows.length > 0) {
+      y -= 50;
+      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
+      pagina.drawText('ESTADO DE INDICADORES (SEMÁFORO)', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
+      y -= 25;
+
+      indicadoresPorSemaforo.rows.forEach(s => {
+        const color = s.estado_semaforo === 'verde' ? VERDE : s.estado_semaforo === 'amarillo' ? AMARILLO : ROJO;
+        pagina.drawRectangle({ x: 30, y: y - 3, width: 10, height: 10, color });
+        pagina.drawText(`${s.estado_semaforo}: ${s.total}`, { x: 45, y, size: 9, font: fN, color: NEGRO });
+        y -= 15;
+      });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte-dashboard-general.pdf"`);
+    res.send(Buffer.from(pdfBytes));
+  } catch (error) {
+    console.error('Error al generar reporte del dashboard:', error);
+    res.status(500).json({ exito: false, mensaje: error.message });
+  }
+};
+
 module.exports = { listar, dashboard, obtener, crear, actualizar, toggleActivo, eliminar,
-                   registrarMedicion, actualizarMedicion, listarMediciones, eliminarMedicion, listarParametros, listarAlertas, generarPDF, generarReporte };
+                   registrarMedicion, actualizarMedicion, listarMediciones, eliminarMedicion, listarParametros, listarAlertas, generarPDF, generarReporte, generarReporteDashboard };
