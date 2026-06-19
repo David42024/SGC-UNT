@@ -8,7 +8,9 @@ router.use(cargarPermisosUsuario);
 router.get('/',                           ctrl.listar);
 router.get('/dashboard',                  ctrl.dashboard);
 router.get('/alertas',                    ctrl.listarAlertas);
+router.get('/reporte',                    ctrl.generarReporte);
 router.get('/:id',                        ctrl.obtener);
+router.get('/:id/parametros',             ctrl.listarParametros);
 router.get('/:id/mediciones',             ctrl.listarMediciones);
 router.get('/:id/pdf',                    ctrl.generarPDF);
 
@@ -19,5 +21,6 @@ router.delete('/:id',                     tienePermiso('indicadores.eliminar'), 
 
 router.post('/:id/mediciones',            tienePermiso('indicadores.mediciones'), ctrl.registrarMedicion);
 router.put('/mediciones/:medId',          tienePermiso('indicadores.mediciones'), ctrl.actualizarMedicion);
+router.delete('/mediciones/:medId',       tienePermiso('indicadores.mediciones'), ctrl.eliminarMedicion);
 
 module.exports = router;

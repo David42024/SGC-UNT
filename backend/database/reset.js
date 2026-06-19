@@ -32,6 +32,32 @@ async function resetDB() {
     console.log(`📦 Base de datos "${dbName}" creada`);
     await client.release();
     
+    // Conectarse a la base de datos recién creada con superusuario para crear extensiones
+    const poolSuper = new Pool({
+      host: dbHost,
+      port: dbPort,
+      database: dbName,
+      user: dbSuperuser,
+      password: dbSuperpassword,
+    });
+    const clientSuper = await poolSuper.connect();
+    console.log('🔗 Conectando a la nueva base de datos con superusuario...');
+    
+    await clientSuper.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await clientSuper.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+    console.log('📦 Extensiones creadas con superusuario');
+    
+    // Otorgar permisos al usuario de la aplicación en el esquema public
+    await clientSuper.query(`GRANT ALL PRIVILEGES ON SCHEMA public TO ${dbUser}`);
+    await clientSuper.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${dbUser}`);
+    await clientSuper.query(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ${dbUser}`);
+    await clientSuper.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${dbUser}`);
+    await clientSuper.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${dbUser}`);
+    console.log('📦 Permisos otorgados al usuario de la aplicación');
+    
+    await clientSuper.release();
+    await poolSuper.end();
+    
     const poolApp = new Pool({
       host:     process.env.DB_HOST     || 'localhost',
       port:     parseInt(process.env.DB_PORT || '5432'),

@@ -55,13 +55,13 @@ export function CargandoPagina() {
 }
 
 // ── Modal ──────────────────────────────────────────────────────
-export function Modal({ abierto, onCerrar, titulo, children, size = 'md' }) {
+export function Modal({ abierto, onCerrar, titulo, children, size = 'md', zIndex = 'z-50' }) {
   if (!abierto) return null;
   const sizes = {
     sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl'
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className={clsx('fixed inset-0 flex items-center justify-center p-4', zIndex)}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCerrar} />
       <div className={clsx('relative bg-white rounded-2xl shadow-2xl w-full', sizes[size], 'max-h-[90vh] flex flex-col')}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
