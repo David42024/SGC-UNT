@@ -4,10 +4,31 @@
 
 @layer base {
   :root {
+    /* Colores institucionales UNT */
     --color-unt: #063B96;
     --color-unt-oscuro: #042a6b;
+    --color-unt-claro: #1e40af;
+    --color-unt-acento: #3b82f6;
+    
+    /* Colores semánticos SGC */
+    --color-sgc-exito: #10b981;
+    --color-sgc-atencion: #f59e0b;
+    --color-sgc-critico: #ef4444;
+    --color-sgc-info: #3b82f6;
+    --color-sgc-neutral: #6b7280;
+    
+    /* Gradientes semánticos */
+    --gradiente-sgc-exito: linear-gradient(135deg, #10b981, #059669);
+    --gradiente-sgc-atencion: linear-gradient(135deg, #f59e0b, #d97706);
+    --gradiente-sgc-critico: linear-gradient(135deg, #ef4444, #dc2626);
+    
+    /* Tipografía */
+    --font-sgc: 'Inter', system-ui, -apple-system, sans-serif;
   }
-  body { @apply antialiased; }
+  body { 
+    @apply antialiased;
+    font-family: var(--font-sgc);
+  }
   * { box-sizing: border-box; }
 }
 

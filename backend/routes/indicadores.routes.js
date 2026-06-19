@@ -9,6 +9,7 @@ router.get('/',                           ctrl.listar);
 router.get('/dashboard',                  ctrl.dashboard);
 router.get('/alertas',                    ctrl.listarAlertas);
 router.get('/reporte',                    ctrl.generarReporte);
+router.get('/reporte-dashboard',          ctrl.generarReporteDashboard);
 router.get('/:id',                        ctrl.obtener);
 router.get('/:id/parametros',             ctrl.listarParametros);
 router.get('/:id/mediciones',             ctrl.listarMediciones);
