@@ -1,34 +1,76 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
-import { GitBranch, Plus, Search, Download, Edit, Trash2, ChevronRight, ChevronDown, RefreshCw } from 'lucide-react';
+import { 
+  GitBranch, Plus, Search, Download, Edit, Trash2, 
+  ChevronRight, ChevronDown, RefreshCw,
+  AlertCircle, Layers, Users, 
+  FileText, Eye, Building2,
+  Grid3x3, List, Printer,
+  FolderTree
+} from 'lucide-react';
 import { Badge, CargandoPagina, Modal, ModalConfirmar, EstadoVacio, PageHeader, Campo, StatCard } from '../../components/ui';
 import clsx from 'clsx';
 
-const NIVELES = ['macroproceso','proceso','subproceso'];
-const FORM_VACIO = { codigo:'', nombre:'', descripcion:'', tipo_id:'', proceso_padre_id:'', nivel:'proceso', responsable_id:'', objetivo:'', alcance:'', entradas:'', salidas:'', recursos:'', indicadores_clave:'' };
+const NIVELES = ['macroproceso', 'proceso', 'subproceso'];
+
+const FORM_VACIO = {
+  codigo: '',
+  nombre: '',
+  descripcion: '',
+  tipo_id: '',
+  proceso_padre_id: '',
+  nivel: 'proceso',
+  responsable_id: '',
+  objetivo: '',
+  alcance: '',
+  entradas: '',
+  salidas: '',
+  recursos: '',
+  indicadores_clave: ''
+};
+
+const CAMPOS_MAYUSCULA = [
+  'codigo', 'nombre', 'descripcion', 'objetivo', 
+  'alcance', 'entradas', 'salidas', 'recursos', 'indicadores_clave'
+];
+
+// Iconos por nivel
+const ICONOS_NIVEL = {
+  macroproceso: Building2,
+  proceso: Layers,
+  subproceso: FileText,
+};
 
 export default function ProcesosPage() {
-  const [mapa, setMapa]         = useState([]);
+  const [mapa, setMapa] = useState([]);
   const [procesos, setProcesos] = useState([]);
-  const [tipos, setTipos]       = useState([]);
+  const [tipos, setTipos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
-  const [stats, setStats]       = useState(null);
+  const [stats, setStats] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [vista, setVista]       = useState('tabla');
-  const [buscar, setBuscar]     = useState('');
-  const [modalForm, setModalForm]     = useState(false);
+  const [vista, setVista] = useState('tabla');
+  const [buscar, setBuscar] = useState('');
+  // FIX 1: 'todos' ahora es su propio valor (string vacío = sin filtrar por activo)
+  const [filtroActivo, setFiltroActivo] = useState('');
+  const [modalForm, setModalForm] = useState(false);
   const [modalEliminar, setModalEliminar] = useState(false);
-  const [seleccionado, setSeleccionado]   = useState(null);
-  const [form, setForm]         = useState(FORM_VACIO);
+  const [modalDetalle, setModalDetalle] = useState(false);
+  const [seleccionado, setSeleccionado] = useState(null);
+  const [form, setForm] = useState(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
   const [expandidos, setExpandidos] = useState({});
+  const [erroresValidacion, setErroresValidacion] = useState({});
 
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const params = buscar ? { buscar } : {};
+      const params = {};
+      if (buscar) params.buscar = buscar;
+      // FIX 1: solo se manda el parámetro 'activo' si hay un filtro real (true/false)
+      if (filtroActivo) params.activo = filtroActivo;
+
       const [procRes, tipoRes, usrRes, mapaRes, statsRes] = await Promise.all([
         api.get('/procesos', { params }),
         api.get('/procesos/tipos'),
@@ -36,145 +78,607 @@ export default function ProcesosPage() {
         api.get('/procesos/mapa'),
         api.get('/procesos/estadisticas'),
       ]);
+      
       setProcesos(procRes.data.datos || []);
       setTipos(tipoRes.data.datos || []);
       setUsuarios(usrRes.data.datos || []);
       setMapa(mapaRes.data.datos || []);
       setStats(statsRes.data.datos);
-    } catch { toast.error('Error al cargar procesos'); }
-    finally  { setCargando(false); }
-  }, [buscar]);
+    } catch (error) {
+      console.error('Error al cargar:', error);
+      toast.error('Error al cargar procesos');
+    } finally {
+      setCargando(false);
+    }
+  }, [buscar, filtroActivo]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
-  const abrirNuevo = () => { setSeleccionado(null); setForm(FORM_VACIO); setModalForm(true); };
+  const arbolMemoizado = useMemo(() => {
+    const construirArbol = (items, padreId = null) => {
+      return items
+        .filter(p => p.proceso_padre_id === padreId || (padreId === null && p.proceso_padre_id === null))
+        .map(p => ({
+          ...p,
+          hijos: construirArbol(items, p.id),
+        }));
+    };
+    return construirArbol(mapa);
+  }, [mapa]);
+
+  const actualizarCampo = (campo, valor) => {
+    if (erroresValidacion[campo]) {
+      setErroresValidacion(prev => ({ ...prev, [campo]: '' }));
+    }
+    const valorFinal = CAMPOS_MAYUSCULA.includes(campo) ? valor.toUpperCase() : valor;
+    setForm(prev => ({ ...prev, [campo]: valorFinal }));
+  };
+
+  const abrirNuevo = () => {
+    setSeleccionado(null);
+    setForm(FORM_VACIO);
+    setErroresValidacion({});
+    setModalForm(true);
+  };
+
   const abrirEditar = (p) => {
     setSeleccionado(p);
-    setForm({ codigo: p.codigo, nombre: p.nombre, descripcion: p.descripcion || '', tipo_id: p.tipo_id, proceso_padre_id: p.proceso_padre_id || '', nivel: p.nivel, responsable_id: p.responsable_id, objetivo: p.objetivo || '', alcance: p.alcance || '', entradas: p.entradas || '', salidas: p.salidas || '', recursos: p.recursos || '', indicadores_clave: p.indicadores_clave || '' });
+    setForm({
+      codigo: p.codigo,
+      nombre: p.nombre,
+      descripcion: p.descripcion || '',
+      tipo_id: p.tipo_id,
+      proceso_padre_id: p.proceso_padre_id || '',
+      nivel: p.nivel,
+      responsable_id: p.responsable_id,
+      objetivo: p.objetivo || '',
+      alcance: p.alcance || '',
+      entradas: p.entradas || '',
+      salidas: p.salidas || '',
+      recursos: p.recursos || '',
+      indicadores_clave: p.indicadores_clave || ''
+    });
+    setErroresValidacion({});
     setModalForm(true);
+  };
+
+  const verDetalle = (p) => {
+    setSeleccionado(p);
+    setModalDetalle(true);
+  };
+
+  const validarFormulario = () => {
+    const errores = {};
+    if (!form.codigo || !form.codigo.trim()) errores.codigo = 'El código es obligatorio';
+    if (!form.nombre || !form.nombre.trim()) errores.nombre = 'El nombre es obligatorio';
+    if (!form.tipo_id) errores.tipo_id = 'El tipo es obligatorio';
+    if (!form.responsable_id) errores.responsable_id = 'El responsable es obligatorio';
+    if (!form.nivel) errores.nivel = 'El nivel es obligatorio';
+    
+    setErroresValidacion(errores);
+    return Object.keys(errores).length === 0;
   };
 
   const guardar = async (e) => {
     e.preventDefault();
-    if (!form.codigo || !form.nombre || !form.tipo_id || !form.responsable_id) { toast.error('Complete los campos obligatorios'); return; }
+    if (!validarFormulario()) {
+      toast.error('Complete los campos obligatorios');
+      return;
+    }
+    
     setGuardando(true);
     try {
-      if (seleccionado) { await api.put(`/procesos/${seleccionado.id}`, form); toast.success('Proceso actualizado'); }
-      else              { await api.post('/procesos', form); toast.success('Proceso creado'); }
-      setModalForm(false); cargar();
-    } catch (err) { toast.error(err.response?.data?.mensaje || 'Error al guardar'); }
-    finally       { setGuardando(false); }
+      if (seleccionado) {
+        await api.put(`/procesos/${seleccionado.id}`, form);
+        toast.success('Proceso actualizado correctamente');
+      } else {
+        await api.post('/procesos', form);
+        toast.success('Proceso creado exitosamente');
+      }
+      setModalForm(false);
+      cargar();
+    } catch (err) {
+      const mensaje = err.response?.data?.mensaje || 'Error al guardar';
+      toast.error(mensaje);
+      if (err.response?.status === 409) {
+        setErroresValidacion(prev => ({ ...prev, codigo: 'El código ya existe' }));
+      }
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const eliminar = async () => {
     setGuardando(true);
-    try { await api.delete(`/procesos/${seleccionado.id}`); toast.success('Proceso desactivado'); setModalEliminar(false); cargar(); }
-    catch (err) { toast.error(err.response?.data?.mensaje || 'Error'); }
-    finally     { setGuardando(false); }
+    try {
+      await api.delete(`/procesos/${seleccionado.id}`);
+      toast.success('Proceso desactivado correctamente');
+      setModalEliminar(false);
+      cargar();
+    } catch (err) {
+      toast.error(err.response?.data?.mensaje || 'Error al desactivar');
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const descargarPDF = async (id) => {
     try {
       const res = await api.get(`/procesos/${id}/pdf`, { responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      const a = document.createElement('a'); a.href = url; a.download = `proceso-${id}.pdf`; a.click();
-    } catch { toast.error('Error al generar PDF'); }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `proceso-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error PDF:', error);
+      toast.error('Error al generar PDF');
+    }
   };
 
-  const toggleExpandir = (id) => setExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleExpandir = (id) => {
+    setExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
-  const NodoMapa = ({ nodo, nivel = 0 }) => (
-    <div className={clsx('border-l-2 border-gray-200 ml-4', nivel === 0 && 'border-unt-azul ml-0')}>
-      <div className={clsx('flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer', nivel === 0 && 'bg-blue-50 mb-1')}
-        onClick={() => nodo.hijos?.length && toggleExpandir(nodo.id)}>
-        <div className={clsx('w-2 h-2 rounded-full flex-shrink-0', nivel === 0 ? 'bg-unt-azul' : nivel === 1 ? 'bg-blue-400' : 'bg-gray-400')} />
-        {nodo.hijos?.length > 0 && (
-          expandidos[nodo.id] ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />
-        )}
-        <span className={clsx('font-medium text-sm', nivel === 0 ? 'text-unt-azul' : 'text-gray-700')}>{nodo.codigo} — {nodo.nombre}</span>
-        <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{nodo.nivel}</span>
-        <span className="text-xs text-gray-400">{nodo.tipo_nombre}</span>
-      </div>
-      {nodo.hijos?.length > 0 && expandidos[nodo.id] && (
-        <div className="ml-4">
-          {nodo.hijos.map(hijo => <NodoMapa key={hijo.id} nodo={hijo} nivel={nivel + 1} />)}
+  // FIX 3: helper para formatear fechas de forma defensiva.
+  // El árbol de /procesos/mapa puede traer nodos resumidos sin creado_en;
+  // esto evita mostrar "Invalid Date" cuando el detalle se abre desde el mapa.
+  const formatearFecha = (valor) => {
+    if (!valor) return 'No disponible';
+    const fecha = new Date(valor);
+    if (isNaN(fecha.getTime())) return 'No disponible';
+    return fecha.toLocaleDateString('es-PE');
+  };
+
+  // Componente Nodo del Mapa
+  const NodoMapa = ({ nodo, nivel = 0 }) => {
+    const tieneHijos = nodo.hijos && nodo.hijos.length > 0;
+    const expandido = expandidos[nodo.id] || false;
+    const IconoNivel = ICONOS_NIVEL[nodo.nivel] || FileText;
+    
+    const coloresNivel = {
+      0: 'border-l-unt-azul bg-gradient-to-r from-unt-azul/5 to-transparent',
+      1: 'border-l-blue-400 bg-gradient-to-r from-blue-50 to-transparent',
+      2: 'border-l-gray-400',
+    };
+
+    return (
+      <div className={clsx(
+        'border-l-4 transition-all duration-200',
+        nivel === 0 && coloresNivel[0],
+        nivel === 1 && coloresNivel[1],
+        nivel === 2 && coloresNivel[2],
+        nivel > 0 && 'ml-6'
+      )}>
+        <div 
+          className={clsx(
+            'flex items-center gap-3 py-3 px-4 rounded-lg transition-all duration-200 cursor-pointer group',
+            nivel === 0 ? 'hover:bg-unt-azul/10' : 'hover:bg-gray-50'
+          )}
+          onClick={() => tieneHijos && toggleExpandir(nodo.id)}
+        >
+          {/* Indicador visual de nivel */}
+          <div className={clsx(
+            'w-1.5 h-8 rounded-full flex-shrink-0',
+            nivel === 0 ? 'bg-unt-azul' : 
+            nivel === 1 ? 'bg-blue-400' : 
+            'bg-gray-400'
+          )} />
+          
+          {/* Icono de nivel */}
+          <IconoNivel size={18} className={clsx(
+            'flex-shrink-0',
+            nivel === 0 ? 'text-unt-azul' : 
+            nivel === 1 ? 'text-blue-500' : 
+            'text-gray-500'
+          )} />
+          
+          {/* Botón expandir/colapsar */}
+          {tieneHijos && (
+            <button className="p-0.5 text-gray-400 hover:text-gray-600 transition-colors">
+              {expandido ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </button>
+          )}
+          
+          {/* Información del proceso */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={clsx(
+                'font-semibold text-sm',
+                nivel === 0 ? 'text-unt-azul' : 'text-gray-800'
+              )}>
+                {nodo.codigo}
+              </span>
+              <span className="text-gray-600 text-sm">—</span>
+              <span className="text-gray-800 text-sm font-medium truncate">
+                {nodo.nombre}
+              </span>
+            </div>
+            {nodo.descripcion && (
+              <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
+                {nodo.descripcion}
+              </p>
+            )}
+          </div>
+          
+          {/* Badges y acciones */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* FIX 2: se quita className de Badge (no se confirmó soporte);
+                se envuelve en un span para el tamaño en vez de pasarlo como prop */}
+            <span className="text-xs">
+              <Badge estado={nodo.nivel} />
+            </span>
+            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              {nodo.tipo_nombre}
+            </span>
+            {nodo.responsable_nombre && (
+              <span className="text-xs text-gray-500 flex items-center gap-1">
+                <Users size={12} />
+                {nodo.responsable_nombre}
+              </span>
+            )}
+            <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                onClick={(e) => { e.stopPropagation(); verDetalle(nodo); }}
+                className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                title="Ver detalle"
+              >
+                <Eye size={14} />
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); descargarPDF(nodo.id); }}
+                className="p-1 text-green-600 hover:bg-green-50 rounded"
+                title="Descargar PDF"
+              >
+                <Download size={14} />
+              </button>
+            </div>
+          </div>
         </div>
-      )}
+        
+        {/* Hijos */}
+        {tieneHijos && expandido && (
+          <div className="ml-2 space-y-1">
+            {nodo.hijos.map(hijo => (
+              <NodoMapa key={hijo.id} nodo={hijo} nivel={nivel + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // FIX 1: 'Todos' ahora manda '' (sin filtro), distinto de 'Activos' ('true')
+  const filtrosRapidos = [
+    { label: 'Todos', value: '' },
+    { label: 'Activos', value: 'true' },
+    { label: 'Inactivos', value: 'false' },
+  ];
+
+  // Componente de Tarjeta de Estadísticas
+  const StatCardMejorado = ({ label, valor, icono: Icono, color, subtitulo }) => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm text-gray-500 font-medium">{label}</p>
+          <p className="text-2xl font-bold text-gray-800 mt-1">{valor}</p>
+          {subtitulo && <p className="text-xs text-gray-400 mt-1">{subtitulo}</p>}
+        </div>
+        <div className={clsx(
+          'p-3 rounded-lg',
+          color === 'blue' && 'bg-blue-50 text-unt-azul',
+          color === 'green' && 'bg-green-50 text-green-600',
+          color === 'gold' && 'bg-amber-50 text-amber-600',
+          color === 'red' && 'bg-red-50 text-red-600'
+        )}>
+          <Icono size={20} />
+        </div>
+      </div>
     </div>
   );
 
   return (
-    <div>
-      <PageHeader titulo="Mapa de Procesos" descripcion="Gestión de macroprocesos, procesos y subprocesos institucionales" icono={GitBranch}
-        acciones={<button onClick={abrirNuevo} className="btn-primario"><Plus size={16} />Nuevo proceso</button>} />
-
-      {stats && (
-        <div className="grid grid-cols-3 gap-4 mb-5">
-          <StatCard label="Total procesos" valor={stats.total} icono={GitBranch} color="blue" />
-          {stats.por_tipo?.map(t => <StatCard key={t.tipo} label={t.tipo} valor={t.cantidad} icono={GitBranch} color="green" />)}
-        </div>
-      )}
-
-      <div className="tarjeta mb-5">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search size={15} className="absolute left-3 top-2.5 text-gray-400" />
-            <input className="campo pl-9" placeholder="Buscar procesos..." value={buscar} onChange={e => setBuscar(e.target.value)} />
+    <div className="space-y-6">
+      {/* Header con gradiente */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-unt-azul via-unt-azul/90 to-unt-azul/80 rounded-2xl p-8 text-white">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+        <div className="absolute bottom-0 left-20 w-48 h-48 bg-white/5 rounded-full translate-y-1/2" />
+        
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-white/10 rounded-lg">
+                <GitBranch size={24} className="text-white" />
+              </div>
+              <h1 className="text-2xl font-bold">Mapa de Procesos</h1>
+            </div>
+            <p className="text-white/80 text-sm max-w-2xl">
+              Gestión integral de macroprocesos, procesos y subprocesos institucionales 
+              para la mejora continua de la calidad educativa
+            </p>
           </div>
-          <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
-            <button onClick={() => setVista('tabla')} className={clsx('px-3 py-1.5 rounded-md text-sm font-medium transition-colors', vista === 'tabla' ? 'bg-white text-unt-azul shadow-sm' : 'text-gray-500')}>Tabla</button>
-            <button onClick={() => setVista('mapa')} className={clsx('px-3 py-1.5 rounded-md text-sm font-medium transition-colors', vista === 'mapa' ? 'bg-white text-unt-azul shadow-sm' : 'text-gray-500')}>Mapa</button>
-          </div>
-          <button onClick={cargar} className="btn-secundario"><RefreshCw size={15} /></button>
+          <button 
+            onClick={abrirNuevo} 
+            className="flex items-center gap-2 px-5 py-2.5 bg-white text-unt-azul rounded-xl font-medium hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl"
+          >
+            <Plus size={18} />
+            Nuevo proceso
+          </button>
         </div>
       </div>
 
-      {cargando ? <CargandoPagina /> : vista === 'mapa' ? (
-        <div className="tarjeta">
-          <h2 className="font-semibold text-gray-800 mb-4">Árbol de procesos institucionales</h2>
-          {mapa.length === 0 ? <p className="text-gray-400 text-sm text-center py-8">No hay procesos registrados</p> : (
-            <div className="space-y-2">
-              {mapa.map(nodo => <NodoMapa key={nodo.id} nodo={nodo} nivel={0} />)}
+      {/* Estadísticas */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCardMejorado 
+            label="Total Procesos" 
+            valor={stats.total} 
+            icono={GitBranch} 
+            color="blue"
+            subtitulo="Procesos institucionales"
+          />
+          {stats.por_tipo?.slice(0, 3).map(t => (
+            <StatCardMejorado 
+              key={t.tipo} 
+              label={t.tipo} 
+              valor={t.cantidad} 
+              icono={Layers} 
+              color="green"
+              subtitulo={`${t.tipo} registrados`}
+            />
+          ))}
+          <StatCardMejorado 
+            label="Niveles" 
+            valor="3" 
+            icono={FolderTree} 
+            color="gold"
+            subtitulo="Macroproceso • Proceso • Subproceso"
+          />
+        </div>
+      )}
+
+      {/* Barra de herramientas */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={16} className="absolute left-3 top-3 text-gray-400" />
+            <input 
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-unt-azul/20 focus:border-unt-azul transition-all bg-gray-50 hover:bg-white" 
+              placeholder="Buscar por código, nombre o descripción..." 
+              value={buscar} 
+              onChange={e => setBuscar(e.target.value)} 
+            />
+          </div>
+          
+          <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-1">
+            {filtrosRapidos.map(f => (
+              <button
+                key={f.label}
+                onClick={() => setFiltroActivo(f.value)}
+                className={clsx(
+                  'px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                  filtroActivo === f.value 
+                    ? 'bg-white text-unt-azul shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          
+          <div className="flex gap-1 bg-gray-50 rounded-lg p-1">
+            <button 
+              onClick={() => setVista('tabla')} 
+              className={clsx(
+                'p-2 rounded-md transition-all',
+                vista === 'tabla' ? 'bg-white text-unt-azul shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              )}
+              title="Vista Tabla"
+            >
+              <List size={18} />
+            </button>
+            <button 
+              onClick={() => setVista('mapa')} 
+              className={clsx(
+                'p-2 rounded-md transition-all',
+                vista === 'mapa' ? 'bg-white text-unt-azul shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              )}
+              title="Vista Mapa"
+            >
+              <Grid3x3 size={18} />
+            </button>
+          </div>
+          
+          <button 
+            onClick={cargar} 
+            className="p-2.5 text-gray-500 hover:text-unt-azul hover:bg-blue-50 rounded-lg transition-all"
+            title="Recargar"
+          >
+            <RefreshCw size={18} className={clsx(cargando && 'animate-spin')} />
+          </button>
+          
+          {/* FIX 4: botón Exportar sin handler -> se quita hasta tener funcionalidad real.
+              Si quieres dejarlo visible pero deshabilitado, ver nota al final. */}
+        </div>
+      </div>
+
+      {/* Contenido principal */}
+      {cargando ? (
+        <CargandoPagina />
+      ) : vista === 'mapa' ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <FolderTree size={20} className="text-unt-azul" />
+              <h2 className="font-semibold text-gray-800">Árbol de procesos institucionales</h2>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                {arbolMemoizado.length} raíces
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-unt-azul" />
+                Macroproceso
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
+                Proceso
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-gray-400" />
+                Subproceso
+              </span>
+            </div>
+          </div>
+          
+          {arbolMemoizado.length === 0 ? (
+            <EstadoVacio 
+              icono={GitBranch} 
+              titulo="No hay procesos registrados" 
+              descripcion="Comience registrando los procesos institucionales" 
+              accion={
+                <button onClick={abrirNuevo} className="btn-primario mx-auto">
+                  <Plus size={16} />
+                  Nuevo proceso
+                </button>
+              } 
+            />
+          ) : (
+            <div className="space-y-1">
+              {arbolMemoizado.map(nodo => (
+                <NodoMapa key={nodo.id} nodo={nodo} nivel={0} />
+              ))}
             </div>
           )}
         </div>
       ) : (
-        <div className="tarjeta p-0 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           {procesos.length === 0 ? (
-            <EstadoVacio icono={GitBranch} titulo="No hay procesos" descripcion="Registre los procesos institucionales"
-              accion={<button onClick={abrirNuevo} className="btn-primario mx-auto"><Plus size={16} />Nuevo proceso</button>} />
+            <EstadoVacio 
+              icono={GitBranch} 
+              titulo="No hay procesos" 
+              descripcion="Registre los procesos institucionales" 
+              accion={
+                <button onClick={abrirNuevo} className="btn-primario mx-auto">
+                  <Plus size={16} />
+                  Nuevo proceso
+                </button>
+              } 
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr>
-                    <th className="tabla-encabezado">Código</th>
-                    <th className="tabla-encabezado">Nombre</th>
-                    <th className="tabla-encabezado">Tipo</th>
-                    <th className="tabla-encabezado">Nivel</th>
-                    <th className="tabla-encabezado">Responsable</th>
-                    <th className="tabla-encabezado">Estado</th>
-                    <th className="tabla-encabezado text-right">Acciones</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Código
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Proceso
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Tipo
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Nivel
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Responsable
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Estado
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {procesos.map(p => (
-                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="tabla-celda font-mono text-xs text-unt-azul font-semibold">{p.codigo}</td>
-                      <td className="tabla-celda"><p className="font-medium text-gray-800">{p.nombre}</p><p className="text-xs text-gray-400">{p.proceso_padre_nombre}</p></td>
-                      <td className="tabla-celda text-gray-500">{p.tipo_nombre}</td>
-                      <td className="tabla-celda"><Badge estado={p.nivel} /></td>
-                      <td className="tabla-celda text-gray-500 text-xs">{p.responsable_nombre}</td>
-                      <td className="tabla-celda"><Badge estado={p.activo ? 'activo' : 'inactivo'} /></td>
-                      <td className="tabla-celda">
-                        <div className="flex items-center gap-1 justify-end">
-                          <button onClick={() => descargarPDF(p.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg"><Download size={15} /></button>
-                          <button onClick={() => abrirEditar(p)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"><Edit size={15} /></button>
-                          <button onClick={() => { setSeleccionado(p); setModalEliminar(true); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {procesos.map(p => {
+                    const IconoNivel = ICONOS_NIVEL[p.nivel] || FileText;
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-6 py-4">
+                          <span className="font-mono text-xs font-semibold text-unt-azul bg-blue-50 px-2 py-1 rounded">
+                            {p.codigo}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <IconoNivel size={16} className={clsx(
+                              p.nivel === 'macroproceso' ? 'text-unt-azul' :
+                              p.nivel === 'proceso' ? 'text-blue-500' :
+                              'text-gray-400'
+                            )} />
+                            <div>
+                              <p className="font-medium text-gray-800">{p.nombre}</p>
+                              {p.proceso_padre_nombre && (
+                                <p className="text-xs text-gray-400 flex items-center gap-1">
+                                  <ChevronRight size={10} />
+                                  {p.proceso_padre_nombre}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-full text-xs">
+                            {p.tipo_nombre}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge estado={p.nivel} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                            <Users size={14} className="text-gray-400" />
+                            {p.responsable_nombre || 'Sin asignar'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge estado={p.activo ? 'activo' : 'inactivo'} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <button 
+                              onClick={() => verDetalle(p)} 
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Ver detalle"
+                            >
+                              <Eye size={15} />
+                            </button>
+                            <button 
+                              onClick={() => descargarPDF(p.id)} 
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Descargar PDF"
+                            >
+                              <Download size={15} />
+                            </button>
+                            <button 
+                              onClick={() => abrirEditar(p)} 
+                              className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Edit size={15} />
+                            </button>
+                            <button 
+                              onClick={() => { setSeleccionado(p); setModalEliminar(true); }} 
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Desactivar"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -182,54 +686,273 @@ export default function ProcesosPage() {
         </div>
       )}
 
-      <Modal abierto={modalForm} onCerrar={() => setModalForm(false)} titulo={seleccionado ? 'Editar proceso' : 'Nuevo proceso'} size="xl">
-        <form onSubmit={guardar} className="space-y-4">
+      {/* Modal de Detalle del Proceso */}
+      <Modal 
+        abierto={modalDetalle} 
+        onCerrar={() => setModalDetalle(false)} 
+        titulo="Detalle del Proceso" 
+        size="xl"
+      >
+        {seleccionado && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Código</p>
+                <p className="font-mono text-unt-azul font-semibold mt-1">{seleccionado.codigo}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Nivel</p>
+                <div className="mt-1">
+                  <Badge estado={seleccionado.nivel} />
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-xs text-gray-500 uppercase font-medium">Nombre</p>
+              <p className="font-semibold text-gray-800 mt-1">{seleccionado.nombre}</p>
+            </div>
+            
+            {seleccionado.descripcion && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Descripción</p>
+                <p className="text-gray-700 mt-1">{seleccionado.descripcion}</p>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Tipo</p>
+                <p className="text-gray-700 mt-1">{seleccionado.tipo_nombre || 'No disponible'}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Responsable</p>
+                <p className="text-gray-700 mt-1">{seleccionado.responsable_nombre || 'Sin asignar'}</p>
+              </div>
+            </div>
+            
+            {seleccionado.proceso_padre_nombre && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Proceso Padre</p>
+                <p className="text-gray-700 mt-1">{seleccionado.proceso_padre_nombre}</p>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Estado</p>
+                <div className="mt-1">
+                  <Badge estado={seleccionado.activo ? 'activo' : 'inactivo'} />
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 uppercase font-medium">Fecha Creación</p>
+                {/* FIX 3: formatearFecha evita "Invalid Date" si el nodo viene
+                    del árbol resumido (/procesos/mapa) sin creado_en */}
+                <p className="text-gray-700 mt-1">
+                  {formatearFecha(seleccionado.creado_en)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de Formulario */}
+      <Modal 
+        abierto={modalForm} 
+        onCerrar={() => setModalForm(false)} 
+        titulo={seleccionado ? 'Editar proceso' : 'Nuevo proceso'} 
+        size="xl"
+      >
+        <form onSubmit={guardar} className="space-y-5">
           <div className="grid grid-cols-3 gap-4">
-            <Campo label="Código" required><input className="campo" value={form.codigo} onChange={e => setForm({...form, codigo: e.target.value})} placeholder="MAC-001" disabled={!!seleccionado} /></Campo>
-            <Campo label="Tipo" required>
-              <select className="campo" value={form.tipo_id} onChange={e => setForm({...form, tipo_id: e.target.value})}>
+            <Campo label="Código" required error={erroresValidacion.codigo}>
+              <input 
+                className="campo font-mono" 
+                value={form.codigo} 
+                onChange={e => actualizarCampo('codigo', e.target.value)} 
+                placeholder="PROC-001" 
+                disabled={!!seleccionado}
+              />
+            </Campo>
+            <Campo label="Tipo" required error={erroresValidacion.tipo_id}>
+              <select 
+                className="campo" 
+                value={form.tipo_id} 
+                onChange={e => setForm({...form, tipo_id: e.target.value})}
+              >
                 <option value="">Seleccione...</option>
-                {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                {tipos.map(t => (
+                  <option key={t.id} value={t.id}>{t.nombre}</option>
+                ))}
               </select>
             </Campo>
-            <Campo label="Nivel" required>
-              <select className="campo" value={form.nivel} onChange={e => setForm({...form, nivel: e.target.value})}>
-                {NIVELES.map(n => <option key={n} value={n}>{n}</option>)}
+            <Campo label="Nivel" required error={erroresValidacion.nivel}>
+              <select 
+                className="campo" 
+                value={form.nivel} 
+                onChange={e => setForm({...form, nivel: e.target.value})}
+              >
+                {NIVELES.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
               </select>
             </Campo>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
-            <Campo label="Nombre" required><input className="campo" value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Nombre del proceso" /></Campo>
-            <Campo label="Responsable" required>
-              <select className="campo" value={form.responsable_id} onChange={e => setForm({...form, responsable_id: e.target.value})}>
+            <Campo label="Nombre" required error={erroresValidacion.nombre}>
+              <input 
+                className="campo" 
+                value={form.nombre} 
+                onChange={e => actualizarCampo('nombre', e.target.value)} 
+                placeholder="Nombre del proceso" 
+              />
+            </Campo>
+            <Campo label="Responsable" required error={erroresValidacion.responsable_id}>
+              <select 
+                className="campo" 
+                value={form.responsable_id} 
+                onChange={e => setForm({...form, responsable_id: e.target.value})}
+              >
                 <option value="">Seleccione...</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombres} {u.apellidos}</option>)}
+                {usuarios.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.nombres} {u.apellidos}
+                  </option>
+                ))}
               </select>
             </Campo>
           </div>
+
+          <Campo label="Descripción">
+            <textarea 
+              className="campo" 
+              rows={2} 
+              value={form.descripcion} 
+              onChange={e => actualizarCampo('descripcion', e.target.value)} 
+              placeholder="Descripción detallada del proceso" 
+            />
+          </Campo>
+
           <Campo label="Proceso padre">
-            <select className="campo" value={form.proceso_padre_id} onChange={e => setForm({...form, proceso_padre_id: e.target.value})}>
+            <select 
+              className="campo" 
+              value={form.proceso_padre_id} 
+              onChange={e => setForm({...form, proceso_padre_id: e.target.value})}
+            >
               <option value="">Ninguno (proceso raíz)</option>
-              {procesos.filter(p => p.id !== seleccionado?.id).map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>)}
+              {procesos
+                .filter(p => p.id !== seleccionado?.id)
+                .map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.codigo} — {p.nombre}
+                  </option>
+                ))}
             </select>
           </Campo>
+
           <div className="grid grid-cols-2 gap-4">
-            <Campo label="Objetivo"><textarea className="campo" rows={2} value={form.objetivo} onChange={e => setForm({...form, objetivo: e.target.value})} /></Campo>
-            <Campo label="Alcance"><textarea className="campo" rows={2} value={form.alcance} onChange={e => setForm({...form, alcance: e.target.value})} /></Campo>
+            <Campo label="Objetivo">
+              <textarea 
+                className="campo" 
+                rows={2} 
+                value={form.objetivo} 
+                onChange={e => actualizarCampo('objetivo', e.target.value)} 
+                placeholder="Objetivo del proceso" 
+              />
+            </Campo>
+            <Campo label="Alcance">
+              <textarea 
+                className="campo" 
+                rows={2} 
+                value={form.alcance} 
+                onChange={e => actualizarCampo('alcance', e.target.value)} 
+                placeholder="Alcance del proceso" 
+              />
+            </Campo>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
-            <Campo label="Entradas"><textarea className="campo" rows={2} value={form.entradas} onChange={e => setForm({...form, entradas: e.target.value})} /></Campo>
-            <Campo label="Salidas"><textarea className="campo" rows={2} value={form.salidas} onChange={e => setForm({...form, salidas: e.target.value})} /></Campo>
+            <Campo label="Entradas">
+              <textarea 
+                className="campo" 
+                rows={2} 
+                value={form.entradas} 
+                onChange={e => actualizarCampo('entradas', e.target.value)} 
+                placeholder="Entradas del proceso" 
+              />
+            </Campo>
+            <Campo label="Salidas">
+              <textarea 
+                className="campo" 
+                rows={2} 
+                value={form.salidas} 
+                onChange={e => actualizarCampo('salidas', e.target.value)} 
+                placeholder="Salidas del proceso" 
+              />
+            </Campo>
           </div>
-          <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-            <button type="button" onClick={() => setModalForm(false)} className="btn-secundario">Cancelar</button>
-            <button type="submit" disabled={guardando} className="btn-primario">{guardando ? 'Guardando...' : seleccionado ? 'Actualizar' : 'Crear proceso'}</button>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Campo label="Recursos">
+              <textarea 
+                className="campo" 
+                rows={2} 
+                value={form.recursos} 
+                onChange={e => actualizarCampo('recursos', e.target.value)} 
+                placeholder="Recursos necesarios" 
+              />
+            </Campo>
+            <Campo label="Indicadores Clave">
+              <textarea 
+                className="campo" 
+                rows={2} 
+                value={form.indicadores_clave} 
+                onChange={e => actualizarCampo('indicadores_clave', e.target.value)} 
+                placeholder="Indicadores clave del proceso" 
+              />
+            </Campo>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <button 
+              type="button" 
+              onClick={() => setModalForm(false)} 
+              className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit" 
+              disabled={guardando} 
+              className="px-6 py-2.5 bg-unt-azul text-white rounded-lg hover:bg-unt-azul/90 transition-colors font-medium disabled:opacity-50"
+            >
+              {guardando ? 'Guardando...' : seleccionado ? 'Actualizar' : 'Crear proceso'}
+            </button>
           </div>
         </form>
       </Modal>
 
-      <ModalConfirmar abierto={modalEliminar} onCerrar={() => setModalEliminar(false)} onConfirmar={eliminar} cargando={guardando}
-        titulo="¿Desactivar proceso?" mensaje={`El proceso "${seleccionado?.nombre}" quedará inactivo.`} />
+      <ModalConfirmar 
+        abierto={modalEliminar} 
+        onCerrar={() => setModalEliminar(false)} 
+        onConfirmar={eliminar} 
+        cargando={guardando}
+        titulo="¿Desactivar proceso?" 
+        mensaje={
+          <div className="space-y-2">
+            <p>
+              El proceso <strong>"{seleccionado?.nombre}"</strong> ({seleccionado?.codigo}) quedará inactivo.
+            </p>
+            <p className="text-sm text-gray-500 flex items-center gap-2">
+              <AlertCircle size={16} />
+              Los subprocesos asociados seguirán visibles en el sistema.
+            </p>
+          </div>
+        } 
+      />
     </div>
   );
 }
