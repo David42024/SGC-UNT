@@ -1,5 +1,7 @@
 const { consulta } = require('../config/db');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+const fs = require('fs');
+const path = require('path');
 
 const listar = async (req, res) => {
   try {
@@ -467,9 +469,7 @@ const generarReporteDashboard = async (req, res) => {
       consulta('SELECT COUNT(*) AS total FROM usuarios'),
     ]);
 
-    const [docsEstado, riesgosNivel, indicadoresPorModulo, indicadoresPorSemaforo] = await Promise.all([
-      consulta('SELECT estado, COUNT(*) AS cantidad FROM documentos GROUP BY estado'),
-      consulta('SELECT clasificacion_nivel, COUNT(*) AS cantidad FROM riesgos GROUP BY clasificacion_nivel'),
+    const [indicadoresPorModulo, indicadoresPorSemaforo] = await Promise.all([
       consulta('SELECT modulo, COUNT(*) AS total FROM indicadores WHERE activo=true GROUP BY modulo ORDER BY total DESC'),
       consulta(`SELECT mi.estado_semaforo, COUNT(*) AS total
                 FROM mediciones_indicador mi
@@ -483,7 +483,19 @@ const generarReporteDashboard = async (req, res) => {
     const fB = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const fN = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    // PORTADA INSTITUCIONAL
+    // Leer y embeber logo UNT
+    let logoImage = null;
+    try {
+      const logoPath = path.join(__dirname, '../../frontend/public/logo_unt.png');
+      if (fs.existsSync(logoPath)) {
+        const logoBytes = fs.readFileSync(logoPath);
+        logoImage = await pdfDoc.embedPng(logoBytes);
+      }
+    } catch (error) {
+      console.log('No se pudo cargar el logo:', error.message);
+    }
+
+    // PÁGINA 1: ENCABEZADO + KPIS + GRÁFICOS
     let pagina = pdfDoc.addPage([595, 842]);
     const width = 595;
     const height = 842;
@@ -493,30 +505,33 @@ const generarReporteDashboard = async (req, res) => {
     const VERDE = rgb(0.06, 0.73, 0.51);
     const AMARILLO = rgb(0.96, 0.62, 0.04);
     const ROJO = rgb(0.94, 0.27, 0.27);
+    const GRIS_CLARO = rgb(0.95, 0.95, 0.95);
 
-    // Encabezado portada
-    pagina.drawRectangle({ x: 0, y: height - 100, width, height: 100, color: AZUL });
-    pagina.drawText('UNIVERSIDAD NACIONAL DE TRUJILLO', { x: 20, y: height - 50, size: 18, font: fB, color: BLANCO });
-    pagina.drawText('SISTEMA DE GESTIÓN DE CALIDAD', { x: 20, y: height - 30, size: 12, font: fN, color: rgb(0.8, 0.9, 1) });
-    pagina.drawText('SGC-UNT', { x: 20, y: height - 15, size: 10, font: fN, color: rgb(0.8, 0.9, 1) });
-
-    // Título del reporte
-    pagina.drawText('REPORTE GENERAL DEL DASHBOARD', { x: 20, y: height - 180, size: 24, font: fB, color: AZUL });
-    pagina.drawText('Sistema de Gestión de Calidad Institucional', { x: 20, y: height - 210, size: 14, font: fN, color: NEGRO });
-
-    const fechaReporte = new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' });
-    pagina.drawText(`Fecha de generación: ${fechaReporte}`, { x: 20, y: height - 250, size: 10, font: fN, color: rgb(0.5, 0.5, 0.5) });
-
-    // PÁGINA 2: RESUMEN EJECUTIVO
-    pagina = pdfDoc.addPage([595, 842]);
     let y = 800;
 
-    pagina.drawRectangle({ x: 0, y: height - 50, width, height: 50, color: AZUL });
-    pagina.drawText('RESUMEN EJECUTIVO', { x: 20, y: height - 30, size: 14, font: fB, color: BLANCO });
+    // Encabezado con fondo azul
+    pagina.drawRectangle({ x: 0, y: height - 60, width, height: 60, color: AZUL });
+    
+    // Dibujar logo si existe
+    if (logoImage) {
+      const logoDims = logoImage.scale(0.05);
+      pagina.drawImage(logoImage, {
+        x: 420,
+        y: height - 60,
+        width: logoDims.width,
+        height: logoDims.height,
+      });
+      pagina.drawText('SGC-UNT', { x: 80, y: height - 35, size: 20, font: fB, color: BLANCO });
+      pagina.drawText('Reporte Ejecutivo del Dashboard', { x: 80, y: height - 15, size: 12, font: fN, color: rgb(0.8, 0.9, 1) });
+    } else {
+      pagina.drawText('SGC-UNT', { x: 20, y: height - 35, size: 20, font: fB, color: BLANCO });
+      pagina.drawText('Reporte Ejecutivo del Dashboard', { x: 20, y: height - 15, size: 12, font: fN, color: rgb(0.8, 0.9, 1) });
+    }
 
-    y -= 70;
-    pagina.drawText('KPIs CLAVE DEL SISTEMA', { x: 20, y, size: 12, font: fB, color: AZUL });
-    y -= 20;
+    const fechaReporte = new Date().toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    pagina.drawText(fechaReporte, { x: width - 80, y: height - 25, size: 10, font: fN, color: BLANCO });
+
+    y -= 80;
 
     const stats = {
       docs: docs.rows[0]?.total || 0,
@@ -529,101 +544,171 @@ const generarReporteDashboard = async (req, res) => {
       usuarios: usuarios.rows[0]?.total || 0,
     };
 
-    // KPIs en grid
+    // Resumen ejecutivo corto
+    pagina.drawText('RESUMEN EJECUTIVO', { x: 20, y, size: 12, font: fB, color: AZUL });
+    y -= 20;
+    const resumen = `El SGC presenta ${stats.indicadores} indicadores activos como logro principal. Desafío: ${stats.docs} documentos y ${stats.riesgos} riesgos.`;
+    pagina.drawText(resumen, { x: 20, y, size: 9, font: fN, color: NEGRO });
+    y -= 30;
+
+    // KPIS en grid 2x3 con colores
     const kpis = [
-      { label: 'Documentos', valor: stats.docs },
-      { label: 'Procesos activos', valor: stats.proc },
-      { label: 'Auditorías', valor: stats.audits },
-      { label: 'No conformidades', valor: stats.acciones },
-      { label: 'Riesgos', valor: stats.riesgos },
-      { label: 'Indicadores activos', valor: stats.indicadores },
-      { label: 'Encuestas', valor: stats.encuestas },
-      { label: 'Usuarios', valor: stats.usuarios },
+      { label: 'Documentos', valor: stats.docs, color: stats.docs === 0 ? ROJO : VERDE },
+      { label: 'Riesgos', valor: stats.riesgos, color: stats.riesgos === 0 ? ROJO : VERDE },
+      { label: 'Procesos', valor: stats.proc, color: stats.proc >= 2 ? VERDE : AMARILLO },
+      { label: 'Indicadores', valor: stats.indicadores, color: stats.indicadores >= 10 ? VERDE : AMARILLO },
+      { label: 'Auditorías', valor: stats.audits, color: stats.audits === 0 ? AMARILLO : VERDE },
+      { label: 'CAPAs', valor: stats.acciones, color: stats.acciones > 5 ? AMARILLO : VERDE },
     ];
 
     kpis.forEach((kpi, i) => {
-      if (i % 2 === 0 && i > 0) y -= 15;
-      const x = i % 2 === 0 ? 20 : 310;
-      pagina.drawText(`${kpi.label}: ${kpi.valor}`, { x, y, size: 10, font: fN, color: NEGRO });
-      if (i % 2 === 1) y -= 20;
+      const row = Math.floor(i / 3);
+      const col = i % 3;
+      const x = 20 + col * 190;
+      const yPos = y - (row * 70);
+      
+      // Tarjeta con borde de color
+      pagina.drawRectangle({ x, y: yPos - 50, width: 180, height: 50, color: GRIS_CLARO });
+      pagina.drawRectangle({ x, y: yPos - 50, width: 180, height: 3, color: kpi.color });
+      pagina.drawText(kpi.label, { x: x + 10, y: yPos - 15, size: 9, font: fN, color: NEGRO });
+      pagina.drawText(kpi.valor.toString(), { x: x + 10, y: yPos - 35, size: 20, font: fB, color: kpi.color });
     });
 
-    y -= 30;
-    pagina.drawLine({ start: { x: 20, y }, end: { x: width - 20, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
+    y -= 160;
 
-    // PÁGINA 3: ESTADO POR MÓDULO
-    pagina = pdfDoc.addPage([595, 842]);
-    y = 800;
-
-    pagina.drawRectangle({ x: 0, y: height - 50, width, height: 50, color: AZUL });
-    pagina.drawText('ESTADO POR MÓDULO', { x: 20, y: height - 30, size: 14, font: fB, color: BLANCO });
-
-    // Documentos por estado
-    if (docsEstado.rows.length > 0) {
-      y -= 70;
-      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
-      pagina.drawText('DOCUMENTOS POR ESTADO', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
-      y -= 25;
-
-      docsEstado.rows.forEach((m, i) => {
-        pagina.drawText(`${m.estado}: ${m.cantidad}`, { x: 30, y, size: 9, font: fN, color: NEGRO });
-        y -= 15;
-      });
-      y -= 20;
-    }
-
-    // Riesgos por nivel
-    if (riesgosNivel.rows.length > 0) {
-      y -= 50;
-      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
-      pagina.drawText('RIESGOS POR NIVEL', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
-      y -= 25;
-
-      riesgosNivel.rows.forEach((s, i) => {
-        pagina.drawText(`${s.clasificacion_nivel}: ${s.cantidad}`, { x: 30, y, size: 9, font: fN, color: NEGRO });
-        y -= 15;
-      });
-    }
-
-    // PÁGINA 4: INDICADORES
-    pagina = pdfDoc.addPage([595, 842]);
-    y = 800;
-
-    pagina.drawRectangle({ x: 0, y: height - 50, width, height: 50, color: AZUL });
-    pagina.drawText('INDICADORES', { x: 20, y: height - 30, size: 14, font: fB, color: BLANCO });
-
-    // Indicadores por módulo
+    // Gráfico de barras invertidas para indicadores por módulo
     if (indicadoresPorModulo.rows.length > 0) {
-      y -= 70;
-      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
-      pagina.drawText('INDICADORES POR MÓDULO', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
-      y -= 25;
+      pagina.drawText('INDICADORES POR MÓDULO', { x: 20, y, size: 11, font: fB, color: AZUL });
+      y -= 145;
 
-      indicadoresPorModulo.rows.forEach((m, i) => {
-        pagina.drawText(`${m.modulo}: ${m.total}`, { x: 30, y, size: 9, font: fN, color: NEGRO });
-        y -= 15;
+      const maxVal = Math.max(...indicadoresPorModulo.rows.map(r => r.total), 12);
+      const barWidth = 50;
+      const barSpacing = 40;
+      const startX = 100;
+      const chartHeight = 100;
+      const topY = y;
+      const bottomY = topY + chartHeight;
+
+      // Dibujar eje Y invertido (0 arriba, max abajo)
+      for (let i = 0; i <= maxVal; i += 2) {
+        const yPos = topY + (i / maxVal) * chartHeight;
+        pagina.drawText(i.toString(), { x: 30, y: yPos, size: 8, font: fN, color: NEGRO });
+        // Línea horizontal de guía
+        pagina.drawLine({ start: { x: 50, y: yPos }, end: { x: width - 50, y: yPos }, thickness: 0.5, color: rgb(0.9, 0.9, 0.9) });
+      }
+
+      // Dibujar eje X inferior
+      pagina.drawLine({
+        start: { x: 50, y: bottomY },
+        end: { x: width - 50, y: bottomY },
+        thickness: 1,
+        color: NEGRO
       });
-      y -= 20;
+
+      // Dibujar barras invertidas (crecen hacia abajo desde arriba)
+      indicadoresPorModulo.rows.forEach((mod, i) => {
+        const x = startX + i * (barWidth + barSpacing);
+        const barHeight = (mod.total / maxVal) * chartHeight;
+        
+        // Color según módulo
+        const barColor = mod.modulo === 'general' ? AZUL : mod.modulo === 'satisfaccion' ? rgb(1, 0.5, 0) : AZUL;
+        
+        // Barra invertida (comienza en topY y crece hacia abajo)
+        pagina.drawRectangle({ x, y: topY, width: barWidth, height: barHeight, color: barColor });
+        
+        // Valor encima de la barra
+        pagina.drawText(mod.total.toString(), { x: x + 15, y: topY - 10, size: 9, font: fB, color: NEGRO });
+        
+        // Etiqueta en eje X (abajo) - CORREGIDO
+        const label = mod.modulo === 'general' ? 'General' : mod.modulo === 'satisfaccion' ? 'Satisfacción' : mod.modulo.substring(0, 10);
+        pagina.drawText(label, { x: x + 5, y: bottomY + 15, size: 8, font: fN, color: NEGRO });
+      });
+
+      // Nota debajo del gráfico - CORREGIDO
+const totalIndicadores = indicadoresPorModulo.rows.reduce((sum, r) => {
+  const val = Number(r.total);
+  return sum + (isNaN(val) ? 0 : val);
+}, 0);      pagina.drawText(`Total de indicadores activos: ${totalIndicadores}`, { x: 20, y: bottomY + 30, size: 8, font: fN, color: rgb(0.5, 0.5, 0.5) });
+
+      y -= chartHeight + 50;
     }
 
-    // Estado de indicadores por semáforo
+    // PÁGINA 2: GRÁFICOS + RECOMENDACIONES
+    pagina = pdfDoc.addPage([595, 842]);
+    y = 800;
+
+    // Encabezado página 2
+    pagina.drawRectangle({ x: 0, y: height - 40, width, height: 40, color: AZUL });
+    pagina.drawText('ANÁLISIS DETALLADO', { x: 20, y: height - 25, size: 14, font: fB, color: BLANCO });
+
+    y -= 70;
+
+    // Gráfico de semáforo circular
     if (indicadoresPorSemaforo.rows.length > 0) {
-      y -= 50;
-      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
-      pagina.drawText('ESTADO DE INDICADORES (SEMÁFORO)', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
-      y -= 25;
+      pagina.drawText('ESTADO DE INDICADORES (SEMÁFORO)', { x: 20, y, size: 11, font: fB, color: AZUL });
+      y -= 30;
+
+      const total = indicadoresPorSemaforo.rows.reduce((sum, r) => sum + r.total, 0);
+      let startAngle = 0;
+      const centerX = 150;
+      const centerY = y - 50;
+      const radius = 40;
 
       indicadoresPorSemaforo.rows.forEach(s => {
         const color = s.estado_semaforo === 'verde' ? VERDE : s.estado_semaforo === 'amarillo' ? AMARILLO : ROJO;
-        pagina.drawRectangle({ x: 30, y: y - 3, width: 10, height: 10, color });
-        pagina.drawText(`${s.estado_semaforo}: ${s.total}`, { x: 45, y, size: 9, font: fN, color: NEGRO });
-        y -= 15;
+        const percentage = s.total / total;
+        const endAngle = startAngle + (percentage * 2 * Math.PI);
+        
+        // Dibujar sector circular
+        pagina.drawCircle({ x: centerX, y: centerY, size: radius, color: color });
+        
+        // Etiqueta
+        pagina.drawText(`${s.estado_semaforo}: ${s.total}`, { x: 220, y: y - 30 + indicadoresPorSemaforo.rows.indexOf(s) * 15, size: 9, font: fN, color: NEGRO });
+        
+        startAngle = endAngle;
       });
+
+      y -= 120;
     }
+
+    // Recuadro de alertas
+    pagina.drawRectangle({ x: 20, y: y - 60, width: width - 40, height: 60, color: rgb(1, 0.95, 0.95) });
+    pagina.drawRectangle({ x: 20, y: y - 60, width: width - 40, height: 3, color: ROJO });
+    pagina.drawText('ALERTA: ÁREAS CRÍTICAS', { x: 30, y: y - 15, size: 11, font: fB, color: ROJO });
+    
+    const alertas = [];
+    if (stats.docs === 0) alertas.push('• Sin documentos registrados');
+    if (stats.riesgos === 0) alertas.push('• Sin riesgos identificados');
+    if (stats.audits === 0) alertas.push('• Sin auditorías programadas');
+    
+    alertas.forEach((alerta, i) => {
+      pagina.drawText(alerta, { x: 30, y: y - 30 - (i * 12), size: 9, font: fN, color: NEGRO });
+    });
+
+    y -= 80;
+
+    // Recomendaciones
+    pagina.drawText('RECOMENDACIONES', { x: 20, y, size: 11, font: fB, color: AZUL });
+    y -= 20;
+
+    const recomendaciones = [];
+    if (stats.docs === 0) recomendaciones.push('1. Crear primer documento del sistema');
+    if (stats.riesgos === 0) recomendaciones.push('2. Registrar primer riesgo institucional');
+    if (stats.indicadores < 10) recomendaciones.push('3. Expandir sistema de indicadores');
+    if (recomendaciones.length === 0) recomendaciones.push('1. Continuar monitoreo periódico del sistema');
+
+    recomendaciones.forEach((rec, i) => {
+      pagina.drawText(rec, { x: 20, y: y - (i * 15), size: 9, font: fN, color: NEGRO });
+    });
+
+    // Pie de página
+    y = 30;
+    pagina.drawLine({ start: { x: 20, y }, end: { x: width - 20, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
+    pagina.drawText(`Generado por SGC-UNT - ${fechaReporte}`, { x: 20, y: y - 10, size: 7, font: fN, color: rgb(0.5, 0.5, 0.5) });
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="reporte-dashboard-general.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="reporte-ejecutivo-dashboard.pdf"`);
     res.send(Buffer.from(pdfBytes));
   } catch (error) {
     console.error('Error al generar reporte del dashboard:', error);
