@@ -58,20 +58,15 @@ async function resetDB() {
     await clientSuper.release();
     await poolSuper.end();
     
-    const poolApp = new Pool({
-      host:     process.env.DB_HOST     || 'localhost',
-      port:     parseInt(process.env.DB_PORT || '5432'),
-      database: dbName,
-      user:     process.env.DB_USER     || 'sgc_user',
-      password: process.env.DB_PASSWORD || 'sgc_pass',
-    });
-    const clienteApp = await poolApp.connect();
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const sql = fs.readFileSync(schemaPath, 'utf8');
-    console.log('📄 Ejecutando schema.sql...');
-    await clienteApp.query(sql);
-    await clienteApp.release();
-    await poolApp.end();
+    console.log('📄 Ejecutando migraciones de Sequelize...');
+    const { execSync } = require('child_process');
+    execSync('npx sequelize-cli db:migrate', { stdio: 'inherit' });
+
+    console.log('🌱 Ejecutando seeders de Sequelize...');
+    execSync('npx sequelize-cli db:seed:all', { stdio: 'inherit' });
+
+    console.log('🔐 Sincronizando permisos desde configuración...');
+    execSync('node database/sync-permisos.js', { stdio: 'inherit' });
     
     console.log('✅ Reseteo completo!');
     console.log('👤 Usuario admin: admin@unt.edu.pe / Admin1234!');
