@@ -86,12 +86,21 @@ try {
 }
 
 async function runMigrateAndSync() {
-  console.log('\n📄 Ejecutando migración de schema.sql...');
+  console.log('\n📄 Ejecutando migraciones de Sequelize...');
   try {
-    execSync('node database/migrate.js', { stdio: 'inherit' });
-    console.log('✅ Migración completada!');
+    execSync('npx sequelize-cli db:migrate', { stdio: 'inherit' });
+    console.log('✅ Migraciones completadas!');
   } catch (error) {
-    console.error('❌ Error en migración:', error.message);
+    console.error('❌ Error en migraciones:', error.message);
+    process.exit(1);
+  }
+
+  console.log('\n🌱 Ejecutando seeders de Sequelize...');
+  try {
+    execSync('npx sequelize-cli db:seed:all', { stdio: 'inherit' });
+    console.log('✅ Seeders completados!');
+  } catch (error) {
+    console.error('❌ Error en seeders:', error.message);
     process.exit(1);
   }
 

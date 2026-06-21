@@ -138,7 +138,14 @@ KPIs reales UNT       Flujo documental      Cumplimiento normativo     Riesgos +
                                                                     + automatizaciones ⏳
 
 Lo que todos deben respetar
-Regla compartidaDetalleUn solo rol por ahoraSolo admin activo, sin bloqueos por rol en frontendNombres en españolTablas, variables, labels y rutas en españolPDF en cada móduloCada módulo debe tener al menos un endpoint de descargaConsistencia de BDNo modificar nombres de tablas ya existentes sin coordinarComponentes UI compartidosUsar /components/ui/index.jsx para Badge, Modal, StatCard, etc.
+| Regla compartida | Detalle |
+| --- | --- |
+| Un solo rol por ahora | Solo admin activo, sin bloqueos por rol en frontend |
+| Nombres en español | Tablas, variables, labels y rutas en español |
+| PDF en cada módulo | Cada módulo debe tener al menos un endpoint de descarga |
+| Consistencia de BD | No modificar nombres de tablas ya existentes sin coordinar |
+| Componentes UI compartidos | Usar /components/ui/index.jsx para Badge, Modal, StatCard, etc. |
+| Uso obligatorio de Sequelize | Todo el código de base de datos a futuro debe utilizar Sequelize ORM (modelos, migraciones y seeders). El código legado actual se mantiene como está con consultas SQL tradicionales utilizando la configuración legada (`backend/config/db.js`) y se actualizará en el futuro. |
 
 
 
@@ -152,7 +159,7 @@ solo_lectura	👁 Read	👁 Read	👁 Read	👁 Read	👁 Read	👁 Read	❌
 **Sistema RBAC PARA REVISAR:**
 - Archivo de configuración: `backend/config/roles-permisos.js`
 - Para agregar/modificar roles y permisos: editar el archivo y ejecutar `npm run sync:permisos`
-- El comando `npm run db:setup` ahora ejecuta automáticamente: migrate + sync:permisos
+- El comando `npm run db:setup` ahora ejecuta automáticamente: db:migrate (Sequelize) + db:seed (Sequelize) + sync:permisos
 - Los permisos se cargan desde la base de datos en cada petición autenticada
 
 Generación de PDFs
