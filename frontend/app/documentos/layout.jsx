@@ -109,16 +109,19 @@ export default function DashboardLayout({ children }) {
 
       {/* Contenido principal */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Topbar */}
+        {/* Topbar con notificaciones mejoradas */}
         <header className="bg-white border-b border-gray-200 h-14 flex items-center px-4 gap-4 flex-shrink-0">
           <button onClick={() => setSidebarAbierto(true)} className="lg:hidden text-gray-500 hover:text-gray-700">
             <Menu size={22} />
           </button>
           <div className="flex-1" />
-          <button className="relative text-gray-500 hover:text-gray-700 p-1.5 rounded-lg hover:bg-gray-100">
+
+          {/* 👇 BOTÓN DE NOTIFICACIONES MEJORADO */}
+          <button className="relative text-gray-500 hover:text-gray-700 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
             <Bell size={20} />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
           </button>
+
           <div className="flex items-center gap-2 text-sm">
             <div className="w-8 h-8 bg-unt-azul rounded-full flex items-center justify-center">
               <span className="text-white text-xs font-semibold">

@@ -186,12 +186,18 @@ export default function DashboardPage() {
                   labelStyle={{ fontSize: 10 }}
                 >
                   {docsEstado.map((entry, index) => {
+                    // FIX: las claves ahora coinciden con los estados reales
+                    // del flujo de documentos (borrador → revision → aprobado
+                    // → vigente → obsoleto), definidos en documentos.controller.js.
+                    // Antes decía "en_revision" y "vencido", que no existen en
+                    // la BD, por lo que esos estados caían al color de fallback
+                    // (azul) y daban la sensación de que "todo salía azul".
                     const colores = {
-                      vigente: '#10b981',
-                      en_revision: '#f59e0b',
-                      obsoleto: '#6b7280',
-                      vencido: '#ef4444',
-                      borrador: '#3b82f6'
+                      borrador: '#3b82f6',  // azul
+                      revision: '#f59e0b',  // amarillo
+                      aprobado: '#8b5cf6',  // morado
+                      vigente: '#10b981',   // verde
+                      obsoleto: '#6b7280'   // gris
                     };
                     return <Cell key={`cell-${index}`} fill={colores[entry.estado] || COLORES_PIE[index % COLORES_PIE.length]} />;
                   })}
