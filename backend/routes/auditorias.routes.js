@@ -26,6 +26,7 @@ router.put('/programas/:id',           tienePermiso('auditorias.editar'), ctrl.a
 router.post('/',                       tienePermiso('auditorias.crear'), ctrl.crear);
 router.put('/:id',                     tienePermiso('auditorias.editar'), ctrl.actualizar);
 router.delete('/:id',                  tienePermiso('auditorias.eliminar'), ctrl.eliminar);
+router.patch('/:id/estado',            tienePermiso('auditorias.editar'), ctrl.cambiarEstadoAuditoria);
 
 router.post('/:id/auditores',          tienePermiso('auditorias.ejecutar'), ctrl.agregarAuditor);
 router.delete('/:id/auditores/:uid',   tienePermiso('auditorias.ejecutar'), ctrl.eliminarAuditor);

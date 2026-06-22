@@ -22,6 +22,7 @@ router.get('/:id/pdf',                   ctrl.generarPDF);
 router.post('/',                         tienePermiso('acciones.crear'), ctrl.crear);
 router.put('/:id',                       tienePermiso('acciones.editar'), ctrl.actualizar);
 router.patch('/:id/estado',              tienePermiso('acciones.cerrar'), ctrl.cambiarEstado);
+router.patch('/:id/verificar',           tienePermiso('acciones.cerrar'), ctrl.verificar);
 router.delete('/:id',                    tienePermiso('acciones.eliminar'), ctrl.eliminar);
 
 router.post('/:id/analisis',             tienePermiso('acciones.editar'), ctrl.registrarAnalisis);

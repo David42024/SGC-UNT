@@ -9,8 +9,8 @@ const TIPOS    = ['correctiva','preventiva','mejora'];
 const ORIGENES = ['auditoria','queja','revision','autoevaluacion','otro'];
 const IMPACTOS = ['bajo','medio','alto','critico'];
 const ESTADOS  = ['abierto','en_proceso','verificado','cerrado'];
-const METODOS  = ['5_porques','ishikawa','otro'];
-const FORM_VACIO = { codigo:'', titulo:'', descripcion:'', tipo:'correctiva', origen:'auditoria', proceso_id:'', responsable_id:'', fecha_limite:'', impacto:'medio' };
+const METODOS  = ['5_porques','ishikawa','amef','otro'];
+const FORM_VACIO = { codigo:'', titulo:'', descripcion:'', tipo:'correctiva', origen:'auditoria', proceso_id:'', responsable_id:'', fecha_limite:'', impacto:'medio', causa_raiz:'', metodo_analisis:'5_porques' };
 
 export default function AccionesPage() {
   const [items, setItems]       = useState([]);
@@ -28,6 +28,9 @@ export default function AccionesPage() {
   const [form, setForm]         = useState(FORM_VACIO);
   const [planes, setPlanes]     = useState([]);
   const [formPlan, setFormPlan] = useState({ actividad:'', responsable_id:'', fecha_inicio:'', fecha_limite:'' });
+  const [mostrarFormPlan, setMostrarFormPlan] = useState(false);
+  const [modalVerificar, setModalVerificar] = useState(false);
+  const [formVerificar, setFormVerificar] = useState({ fecha_verificacion: '', efectividad: '', observaciones_verificacion: '', evidencia_url: '' });
   const [guardando, setGuardando] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -54,11 +57,33 @@ export default function AccionesPage() {
 
   const filtrados = items.filter(i => !buscar || i.titulo?.toLowerCase().includes(buscar.toLowerCase()) || i.codigo?.toLowerCase().includes(buscar.toLowerCase()));
 
-  const abrirNuevo = () => { setSeleccionado(null); setForm(FORM_VACIO); setModalForm(true); };
-  const abrirEditar = (item) => { setSeleccionado(item); setForm({ codigo: item.codigo, titulo: item.titulo, descripcion: item.descripcion || '', tipo: item.tipo, origen: item.origen, proceso_id: item.proceso_id || '', responsable_id: item.responsable_id, fecha_limite: item.fecha_limite?.slice(0,10) || '', impacto: item.impacto }); setModalForm(true); };
+  const abrirNuevo = () => {
+    const año = new Date().getFullYear();
+    const itemsDelAño = items.filter(i => i.codigo?.startsWith(`NC-${año}-`));
+    const siguienteNumero = itemsDelAño.length + 1;
+    const codigo = `NC-${año}-${String(siguienteNumero).padStart(3, '0')}`;
+    setSeleccionado(null);
+    setForm({...FORM_VACIO, codigo});
+    setModalForm(true);
+  };
+  const abrirEditar = (item) => { setSeleccionado(item); setForm({ 
+    codigo: item.codigo, 
+    titulo: item.titulo, 
+    descripcion: item.descripcion || '', 
+    tipo: item.tipo, 
+    origen: item.origen, 
+    proceso_id: item.proceso_id || '', 
+    responsable_id: item.responsable_id, 
+    fecha_limite: item.fecha_limite?.slice(0,10) || '', 
+    impacto: item.impacto,
+    causa_raiz: item.causa_raiz || '',
+    metodo_analisis: item.metodo_analisis || '5_porques'
+  }); setModalForm(true); };
 
   const abrirPlanes = async (item) => {
     setSeleccionado(item);
+    setMostrarFormPlan(false);
+    setFormPlan({ actividad:'', responsable_id:'', fecha_inicio:'', fecha_limite:'' });
     try { const res = await api.get(`/acciones/${item.id}/planes`); setPlanes(res.data.datos || []); }
     catch { toast.error('Error al cargar planes'); }
     setModalPlanes(true);
@@ -86,7 +111,26 @@ export default function AccionesPage() {
       const res = await api.get(`/acciones/${seleccionado.id}/planes`);
       setPlanes(res.data.datos || []);
       setFormPlan({ actividad:'', responsable_id:'', fecha_inicio:'', fecha_limite:'' });
+      setMostrarFormPlan(false);
     } catch (err) { toast.error(err.response?.data?.mensaje || 'Error'); }
+    finally       { setGuardando(false); }
+  };
+
+  const guardarVerificacion = async (e) => {
+    e.preventDefault();
+    if (!formVerificar.fecha_verificacion || !formVerificar.efectividad) { toast.error('Complete campos obligatorios'); return; }
+    setGuardando(true);
+    try {
+      await api.patch(`/acciones/${seleccionado.id}/verificar`, formVerificar);
+      toast.success('Verificación registrada correctamente');
+      setModalVerificar(false);
+      await cargar(); // Recargar la lista
+      if (seleccionado) {
+        // Actualizar la información de la acción seleccionada
+        const res = await api.get(`/acciones/${seleccionado.id}`);
+        setSeleccionado(res.data.datos);
+      }
+    } catch (err) { toast.error(err.response?.data?.mensaje || 'Error al registrar verificación'); }
     finally       { setGuardando(false); }
   };
 
@@ -96,6 +140,7 @@ export default function AccionesPage() {
       const res = await api.get(`/acciones/${seleccionado.id}/planes`);
       setPlanes(res.data.datos || []);
       toast.success('Estado actualizado');
+      await cargar(); // Recargar stats
     } catch { toast.error('Error al actualizar estado'); }
   };
 
@@ -197,7 +242,7 @@ export default function AccionesPage() {
       </div>
 
       {/* Modal CAPA */}
-      <Modal abierto={modalForm} onCerrar={() => setModalForm(false)} titulo={seleccionado ? 'Editar acción' : 'Nueva no conformidad / acción'} size="lg">
+      <Modal abierto={modalForm} onCerrar={() => setModalForm(false)} titulo={seleccionado ? 'Editar acción' : 'Nueva no conformidad / acción'} size="lg" cerrarAlClickFuera={false}>
         <form onSubmit={guardar} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Campo label="Código" required><input className="campo" value={form.codigo} onChange={e => setForm({...form, codigo: e.target.value})} placeholder="NC-2024-001" disabled={!!seleccionado} /></Campo>
@@ -236,6 +281,42 @@ export default function AccionesPage() {
               </select>
             </Campo>
           </div>
+
+          {/* Análisis de causa raíz */}
+          <div className="border border-gray-200 rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Análisis de causa raíz</h3>
+            <Campo label="Método de análisis">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {['5_porques','ishikawa','amef','otro'].map((metodo) => (
+                  <label key={metodo} className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-unt-azul transition-colors">
+                    <input
+                      type="radio"
+                      name="metodo_analisis"
+                      value={metodo}
+                      checked={form.metodo_analisis === metodo}
+                      onChange={e => setForm({...form, metodo_analisis: e.target.value})}
+                      className="text-unt-azul focus:ring-unt-azul"
+                    />
+                    <span className="text-sm text-gray-700">
+                      {metodo === '5_porques' ? '5 Porqués' :
+                       metodo === 'ishikawa' ? 'Ishikawa' :
+                       metodo === 'amef' ? 'AMEF' : 'Otro'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </Campo>
+            <Campo label="Causa raíz">
+              <textarea
+                className="campo"
+                rows={4}
+                value={form.causa_raiz}
+                onChange={e => setForm({...form, causa_raiz: e.target.value})}
+                placeholder="Describa la causa raíz identificada..."
+              />
+            </Campo>
+          </div>
+
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
             <button type="button" onClick={() => setModalForm(false)} className="btn-secundario">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primario">{guardando ? 'Guardando...' : seleccionado ? 'Actualizar' : 'Crear'}</button>
@@ -244,32 +325,45 @@ export default function AccionesPage() {
       </Modal>
 
       {/* Modal plan de acción */}
-      <Modal abierto={modalPlanes} onCerrar={() => setModalPlanes(false)} titulo={`Plan de acción — ${seleccionado?.titulo}`} size="xl">
+      <Modal abierto={modalPlanes} onCerrar={() => setModalPlanes(false)} titulo={`Plan de acción — ${seleccionado?.titulo}`} size="xl" cerrarAlClickFuera={false}>
         <div className="space-y-5">
-          <form onSubmit={guardarPlan} className="bg-gray-50 rounded-xl p-4 space-y-3">
-            <h3 className="font-medium text-gray-700 text-sm">Agregar actividad</h3>
-            <Campo label="Actividad" required><input className="campo" value={formPlan.actividad} onChange={e => setFormPlan({...formPlan, actividad: e.target.value})} placeholder="Descripción de la actividad..." /></Campo>
-            <div className="grid grid-cols-3 gap-3">
-              <Campo label="Responsable" required>
-                <select className="campo" value={formPlan.responsable_id} onChange={e => setFormPlan({...formPlan, responsable_id: e.target.value})}>
-                  <option value="">Seleccione...</option>
-                  {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombres} {u.apellidos}</option>)}
-                </select>
-              </Campo>
-              <Campo label="Inicio"><input type="date" className="campo" value={formPlan.fecha_inicio} onChange={e => setFormPlan({...formPlan, fecha_inicio: e.target.value})} /></Campo>
-              <Campo label="Límite" required><input type="date" className="campo" value={formPlan.fecha_limite} onChange={e => setFormPlan({...formPlan, fecha_limite: e.target.value})} /></Campo>
-            </div>
-            <div className="flex justify-end">
-              <button type="submit" disabled={guardando} className="btn-primario"><Plus size={15} />Agregar actividad</button>
-            </div>
-          </form>
+          <div className="flex justify-between items-center">
+            <h3 className="font-semibold text-gray-800">Actividades del plan</h3>
+            <button onClick={() => setMostrarFormPlan(true)} className="btn-primario" disabled={mostrarFormPlan}>
+              <Plus size={15} />+ Actividad
+            </button>
+          </div>
+
+          {mostrarFormPlan && (
+            <form onSubmit={guardarPlan} className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <h3 className="font-medium text-gray-700 text-sm">Agregar nueva actividad</h3>
+              <Campo label="Actividad (descripción)" required><textarea className="campo" rows={2} value={formPlan.actividad} onChange={e => setFormPlan({...formPlan, actividad: e.target.value})} placeholder="Descripción detallada de la actividad a realizar..." /></Campo>
+              <div className="grid grid-cols-3 gap-3">
+                <Campo label="Responsable" required>
+                  <select className="campo" value={formPlan.responsable_id} onChange={e => setFormPlan({...formPlan, responsable_id: e.target.value})}>
+                    <option value="">Seleccione...</option>
+                    {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombres} {u.apellidos}</option>)}
+                  </select>
+                </Campo>
+                <Campo label="Inicio"><input type="date" className="campo" value={formPlan.fecha_inicio} onChange={e => setFormPlan({...formPlan, fecha_inicio: e.target.value})} /></Campo>
+                <Campo label="Límite" required><input type="date" className="campo" value={formPlan.fecha_limite} onChange={e => setFormPlan({...formPlan, fecha_limite: e.target.value})} /></Campo>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => { setMostrarFormPlan(false); setFormPlan({ actividad:'', responsable_id:'', fecha_inicio:'', fecha_limite:'' }); }} className="btn-secundario">Cancelar</button>
+                <button type="submit" disabled={guardando} className="btn-primario"><Plus size={15} />Agregar</button>
+              </div>
+            </form>
+          )}
 
           <div className="space-y-2">
             {planes.length === 0 ? <p className="text-gray-400 text-sm text-center py-6">No hay actividades en el plan</p> :
               planes.map((p, i) => (
                 <div key={p.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl">
                   <div className="w-7 h-7 bg-unt-azul/10 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-unt-azul text-xs font-bold">{i+1}</span>
+                    {p.estado === 'completado' ? 
+                      <span className="text-green-600 text-xs font-bold">✓</span> : 
+                      <span className="text-unt-azul text-xs font-bold">{i+1}</span>
+                    }
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{p.actividad}</p>
@@ -282,7 +376,91 @@ export default function AccionesPage() {
               ))
             }
           </div>
+
+          {/* Verificar efectividad button */}
+          {planes.every(p => p.estado === 'completado') && seleccionado?.estado !== 'verificado' && (
+            <div className="pt-4 border-t border-gray-200">
+              <button 
+                onClick={() => {
+                  const hoy = new Date().toISOString().split('T')[0];
+                  setFormVerificar({ fecha_verificacion: hoy, efectividad: '', observaciones_verificacion: '', evidencia_url: '' });
+                  setModalVerificar(true);
+                }}
+                className="btn-primario w-full"
+              >
+                Verificar efectividad
+              </button>
+            </div>
+          )}
+
+          {/* Si ya está verificado, mostrar la info */}
+          {seleccionado?.estado === 'verificado' && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+              <h3 className="font-semibold text-green-800 mb-2">✓ Verificación realizada</h3>
+              <p className="text-sm text-gray-700">
+                Fecha: {seleccionado.fecha_verificacion ? new Date(seleccionado.fecha_verificacion).toLocaleDateString('es-PE') : '—'}
+              </p>
+              <p className="text-sm text-gray-700">
+                Efectividad: {seleccionado.efectividad === 'si' ? 'Sí, fue efectiva' : seleccionado.efectividad === 'parcial' ? 'Parcialmente efectiva' : 'No fue efectiva'}
+              </p>
+              {seleccionado.observaciones_verificacion && (
+                <p className="text-sm text-gray-700 mt-2">
+                  Observaciones: {seleccionado.observaciones_verificacion}
+                </p>
+              )}
+            </div>
+          )}
         </div>
+      </Modal>
+
+      {/* Modal de verificación */}
+      <Modal abierto={modalVerificar} onCerrar={() => setModalVerificar(false)} titulo="Verificación de la CAPA" size="lg" cerrarAlClickFuera={false}>
+        <form onSubmit={guardarVerificacion} className="space-y-4">
+          <Campo label="Fecha de verificación" required>
+            <input type="date" className="campo" value={formVerificar.fecha_verificacion} onChange={e => setFormVerificar({...formVerificar, fecha_verificacion: e.target.value})} />
+          </Campo>
+
+          <Campo label="¿La acción eliminó la causa del problema?" required>
+            <div className="space-y-2">
+              {[
+                { value: 'si', label: 'Sí, fue efectiva' },
+                { value: 'parcial', label: 'Parcialmente efectiva' },
+                { value: 'no', label: 'No fue efectiva' }
+              ].map(opt => (
+                <label key={opt.value} className="flex items-center gap-2">
+                  <input 
+                    type="radio" 
+                    name="efectividad" 
+                    value={opt.value} 
+                    checked={formVerificar.efectividad === opt.value} 
+                    onChange={e => setFormVerificar({...formVerificar, efectividad: e.target.value})} 
+                    className="text-unt-azul focus:ring-unt-azul"
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </Campo>
+
+          <Campo label="Observaciones">
+            <textarea 
+              className="campo" 
+              rows={3} 
+              value={formVerificar.observaciones_verificacion} 
+              onChange={e => setFormVerificar({...formVerificar, observaciones_verificacion: e.target.value})} 
+              placeholder="Observaciones sobre la verificación..."
+            />
+          </Campo>
+
+          <Campo label="Adjuntar evidencia (URL)">
+            <input type="text" className="campo" value={formVerificar.evidencia_url} onChange={e => setFormVerificar({...formVerificar, evidencia_url: e.target.value})} placeholder="URL de la evidencia (archivo, foto, etc.)" />
+          </Campo>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setModalVerificar(false)} className="btn-secundario">Cancelar</button>
+            <button type="submit" disabled={guardando} className="btn-primario">{guardando ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        </form>
       </Modal>
 
       <ModalConfirmar abierto={modalEliminar} onCerrar={() => setModalEliminar(false)} onConfirmar={eliminar} cargando={guardando}

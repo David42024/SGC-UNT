@@ -1,0 +1,492 @@
+MÓDULO 4: AUDITORÍAS E INSPECCIONES
+Objetivo
+
+Permitir planificar, ejecutar y controlar auditorías internas y externas para verificar que los procesos cumplen con las normas institucionales, procedimientos e indicadores de calidad.
+
+Este módulo finaliza cuando todos los hallazgos de una auditoría han sido tratados y cerrados.
+
+Funcionalidades que debe tener
+1. Planificación de auditorías
+
+Permite crear el plan de auditoría.
+
+Debe registrar:
+
+Código de auditoría
+Nombre
+Tipo
+Interna
+Externa
+Especial
+Objetivo
+Alcance
+Criterios de auditoría
+Fecha programada
+Fecha de ejecución
+Estado
+Auditor líder
+Equipo auditor
+
+Tu tabla planes_auditoria ya cubre gran parte de esta información.
+
+Además sería recomendable agregar:
+
+objetivo TEXT
+criterios TEXT
+duracion INTEGER
+2. Gestión del equipo auditor
+
+Asignar las personas que participarán.
+
+Cada integrante puede tener un rol:
+
+Auditor líder
+Auditor
+Observador
+
+Tu tabla
+
+equipos_auditoria
+
+ya realiza exactamente esa función.
+
+Relación:
+
+1 Auditoría
+      |
+      |----< Muchos Auditores
+3. Ejecución de la auditoría
+
+Cuando llega la fecha:
+
+El auditor debe poder:
+
+iniciar auditoría
+registrar observaciones
+registrar evidencias
+revisar procesos
+revisar documentos
+entrevistar responsables
+
+El sistema debería permitir cambiar estados
+
+Planificada
+
+↓
+
+En ejecución
+
+↓
+
+Ejecutada
+
+↓
+
+Cerrada
+
+Eso coincide con tu campo
+
+estado
+4. Registro de Hallazgos
+
+Es probablemente la parte más importante.
+
+Durante la auditoría pueden aparecer:
+
+No conformidades
+Observaciones
+Oportunidades de mejora
+
+Tu tabla
+
+hallazgos
+
+maneja exactamente eso.
+
+Cada hallazgo debe contener:
+
+Auditoría
+Tipo
+Descripción
+Área afectada
+Gravedad
+Evidencias
+Responsable
+Estado
+
+Actualmente tienes:
+
+tipo
+
+descripcion
+
+area_proceso_id
+
+gravedad
+
+estado
+
+Sería recomendable agregar:
+
+evidencia_url
+
+responsable_id
+
+fecha_hallazgo
+5. Seguimiento de Hallazgos
+
+Después de terminar la auditoría los hallazgos no desaparecen.
+
+Cada uno debe tener seguimiento.
+
+Estados:
+
+Abierto
+
+↓
+
+En tratamiento
+
+↓
+
+Cerrado
+
+Eso ya existe:
+
+estado
+6. Reportes
+
+El sistema debería generar:
+
+Auditorías programadas
+Auditorías ejecutadas
+Hallazgos por proceso
+Hallazgos por gravedad
+Hallazgos abiertos
+Hallazgos cerrados
+Auditorías por auditor
+7. Dashboard
+
+Indicadores como:
+
+Auditorías realizadas
+Auditorías pendientes
+% cumplimiento del plan anual
+Nº de hallazgos
+Hallazgos críticos
+Hallazgos cerrados
+Tiempo promedio de cierre
+Flujo completo del módulo
+Crear Plan
+
+↓
+
+Asignar Auditores
+
+↓
+
+Ejecutar Auditoría
+
+↓
+
+Registrar Hallazgos
+
+↓
+
+Cerrar Auditoría
+
+↓
+
+Enviar Hallazgos a CAPA
+MÓDULO 5: ACCIONES CORRECTIVAS Y PREVENTIVAS (CAPA)
+Objetivo
+
+Gestionar todas las acciones necesarias para eliminar una no conformidad o prevenir que vuelva a ocurrir.
+
+Este módulo inicia normalmente desde un hallazgo generado por una auditoría.
+
+Funcionalidades que debe tener
+1. Registro de CAPA
+
+Cuando existe una no conformidad:
+
+Se crea una CAPA.
+
+Debe registrar:
+
+Código
+Tipo
+Hallazgo relacionado
+Descripción
+Responsable
+Fecha
+Estado
+
+Tu tabla
+
+capas
+
+ya contempla todo eso.
+
+2. Análisis de causa raíz
+
+Antes de corregir un problema debe conocerse la causa.
+
+Ejemplos:
+
+5 Porqués
+Ishikawa
+AMEF
+
+Tu campo
+
+causa_raiz
+
+sirve para almacenar el resultado del análisis.
+
+3. Definir Acción
+
+El responsable registra:
+
+Qué hará
+Cómo lo hará
+Recursos
+Fecha
+
+Tu campo
+
+accion_propuesta
+
+cumple esa función.
+
+Podría complementarse con:
+
+fecha_compromiso
+
+prioridad
+
+recursos
+4. Implementación
+
+Mientras se ejecuta la acción:
+
+Estados
+
+Registrada
+
+↓
+
+En implementación
+
+↓
+
+Implementada
+
+Tu tabla ya posee:
+
+estado
+5. Seguimiento
+
+Cada CAPA necesita seguimiento.
+
+Tu tabla
+
+seguimientos_capa
+
+es precisamente para eso.
+
+Debe registrar:
+
+Fecha
+Avance
+Observaciones
+
+Por ejemplo
+
+10/05
+
+20%
+
+Se inició capacitación
+
+Luego
+
+15/05
+
+60%
+
+Procedimientos actualizados
+
+Después
+
+22/05
+
+100%
+
+Implementación finalizada
+6. Verificación
+
+No basta con implementar.
+
+Debe comprobarse que funcionó.
+
+Campos:
+
+fecha_verificacion
+
+efectividad
+
+Muy bien definidos.
+
+Puede tener resultados:
+
+Pendiente
+
+↓
+
+Efectiva
+
+↓
+
+Parcial
+
+↓
+
+No efectiva
+7. Cierre
+
+Si la acción fue efectiva
+
+Estado
+
+Cerrada
+
+Si no
+
+Rechazada
+
+o
+
+Nueva CAPA
+8. Evidencias
+
+Cada CAPA debe permitir subir:
+
+fotografías
+documentos
+informes
+manuales actualizados
+actas
+PDFs
+
+Tu campo
+
+evidencia_url
+
+permite almacenar la ubicación de esos archivos.
+
+9. Reportes
+
+El módulo debería generar reportes de:
+
+CAPAs abiertas
+CAPAs cerradas
+CAPAs vencidas
+CAPAs por responsable
+CAPAs por proceso
+Tiempo promedio de cierre
+Acciones efectivas
+Acciones no efectivas
+10. Dashboard
+
+Indicadores como:
+
+CAPAs registradas
+CAPAs en implementación
+CAPAs cerradas
+% de efectividad
+Tiempo promedio de cierre
+Responsable con más CAPAs
+Procesos con más acciones correctivas
+Flujo completo CAPA
+Hallazgo
+
+↓
+
+Registrar CAPA
+
+↓
+
+Analizar causa raíz
+
+↓
+
+Proponer acción
+
+↓
+
+Asignar responsable
+
+↓
+
+Implementar
+
+↓
+
+Seguimiento
+
+↓
+
+Verificación
+
+↓
+
+¿Fue efectiva?
+
+     │
+     ├── Sí
+     │      ↓
+     │   Cerrar CAPA
+     │
+     └── No
+            ↓
+     Nueva acción
+Relación entre ambos módulos
+
+Los dos módulos forman un proceso continuo de mejora:
+
+PLAN DE AUDITORÍA
+        │
+        ▼
+EJECUCIÓN DE AUDITORÍA
+        │
+        ▼
+REGISTRO DE HALLAZGOS
+        │
+        ▼
+CREACIÓN DE CAPA
+        │
+        ▼
+ANÁLISIS DE CAUSA RAÍZ
+        │
+        ▼
+IMPLEMENTACIÓN DE LA ACCIÓN
+        │
+        ▼
+SEGUIMIENTO
+        │
+        ▼
+VERIFICACIÓN DE EFECTIVIDAD
+        │
+        ▼
+CIERRE
+Evaluación de tu modelo de base de datos
+
+El diseño que presentas cubre aproximadamente el 80–85 % de las necesidades funcionales de ambos módulos. Para un sistema de gestión de calidad más robusto, recomendaría añadir algunos campos y tablas adicionales, como:
+
+Auditorías: objetivo, criterios, responsable del proceso auditado, evidencias, checklist de auditoría y acta/informe final.
+Hallazgos: responsable del área, evidencia, fecha del hallazgo y clasificación normativa.
+CAPA: fecha compromiso, prioridad, costo estimado, recursos, porcentaje de avance automático y comentarios de verificación.
+Seguimiento: posibilidad de adjuntar evidencias por cada seguimiento y registrar el usuario que verificó el avance.
+
+Con estas mejoras, el módulo estaría prácticamente listo para cumplir con los procesos habituales exigidos por normas como ISO 9001 e ISO 21001.

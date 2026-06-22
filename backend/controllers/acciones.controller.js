@@ -15,12 +15,15 @@ const listar = async (req, res) => {
       `SELECT nc.*, u.nombres||' '||u.apellidos AS responsable_nombre,
               p.nombre AS proceso_nombre,
               COUNT(pa.id) AS total_actividades,
-              COUNT(pa.id) FILTER (WHERE pa.estado='completado') AS actividades_completadas
+              COUNT(pa.id) FILTER (WHERE pa.estado='completado') AS actividades_completadas,
+              acr.metodo AS metodo_analisis,
+              acr.causa_raiz
        FROM no_conformidades nc
        LEFT JOIN usuarios u ON u.id=nc.responsable_id
        LEFT JOIN procesos p ON p.id=nc.proceso_id
        LEFT JOIN planes_accion_capa pa ON pa.no_conformidad_id=nc.id
-       ${where} GROUP BY nc.id, u.nombres, u.apellidos, p.nombre
+       LEFT JOIN analisis_causa_raiz acr ON acr.no_conformidad_id=nc.id
+       ${where} GROUP BY nc.id, u.nombres, u.apellidos, p.nombre, acr.metodo, acr.causa_raiz
        ORDER BY nc.creado_en DESC`, params
     );
     res.json({ exito: true, datos: resultado.rows });
@@ -33,10 +36,13 @@ const obtener = async (req, res) => {
   try {
     const resultado = await consulta(
       `SELECT nc.*, u.nombres||' '||u.apellidos AS responsable_nombre,
-              p.nombre AS proceso_nombre
+              p.nombre AS proceso_nombre,
+              acr.metodo AS metodo_analisis,
+              acr.causa_raiz
        FROM no_conformidades nc
        LEFT JOIN usuarios u ON u.id=nc.responsable_id
        LEFT JOIN procesos p ON p.id=nc.proceso_id
+       LEFT JOIN analisis_causa_raiz acr ON acr.no_conformidad_id=nc.id
        WHERE nc.id=$1`, [req.params.id]
     );
     if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'No conformidad no encontrada' });
@@ -49,7 +55,7 @@ const obtener = async (req, res) => {
 const crear = async (req, res) => {
   try {
     const { codigo, titulo, descripcion, tipo, origen, proceso_id, hallazgo_id,
-            responsable_id, fecha_limite, impacto } = req.body;
+            responsable_id, fecha_limite, impacto, causa_raiz, metodo_analisis } = req.body;
     const resultado = await consulta(
       `INSERT INTO no_conformidades (codigo, titulo, descripcion, tipo, origen, proceso_id,
        hallazgo_id, responsable_id, fecha_limite, impacto, creado_por, actualizado_por)
@@ -57,6 +63,17 @@ const crear = async (req, res) => {
       [codigo, titulo, descripcion, tipo, origen, proceso_id || null,
        hallazgo_id || null, responsable_id, fecha_limite, impacto || 'medio', req.usuario.id]
     );
+    const ncId = resultado.rows[0].id;
+
+    // Si hay causa_raiz o metodo_analisis, crear el análisis
+    if (causa_raiz || metodo_analisis) {
+      await consulta(
+        `INSERT INTO analisis_causa_raiz (no_conformidad_id, metodo, descripcion_problema, causa_raiz, creado_por, actualizado_por)
+         VALUES ($1,$2,$3,$4,$5,$5)`,
+        [ncId, metodo_analisis || '5_porques', descripcion || '', causa_raiz || '', req.usuario.id]
+      );
+    }
+
     res.status(201).json({ exito: true, datos: resultado.rows[0], mensaje: 'No conformidad registrada' });
   } catch (error) {
     if (error.code === '23505') return res.status(409).json({ exito: false, mensaje: 'El código ya existe' });
@@ -66,7 +83,7 @@ const crear = async (req, res) => {
 
 const actualizar = async (req, res) => {
   try {
-    const { titulo, descripcion, tipo, origen, proceso_id, responsable_id, fecha_limite, impacto } = req.body;
+    const { titulo, descripcion, tipo, origen, proceso_id, responsable_id, fecha_limite, impacto, causa_raiz, metodo_analisis } = req.body;
     const resultado = await consulta(
       `UPDATE no_conformidades SET titulo=$1, descripcion=$2, tipo=$3, origen=$4,
        proceso_id=$5, responsable_id=$6, fecha_limite=$7, impacto=$8, actualizado_por=$9
@@ -74,6 +91,25 @@ const actualizar = async (req, res) => {
       [titulo, descripcion, tipo, origen, proceso_id || null, responsable_id, fecha_limite, impacto, req.usuario.id, req.params.id]
     );
     if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'No conformidad no encontrada' });
+
+    // Actualizar o crear el análisis de causa raíz
+    const existeAnalisis = await consulta('SELECT id FROM analisis_causa_raiz WHERE no_conformidad_id=$1', [req.params.id]);
+    if (causa_raiz || metodo_analisis) {
+      if (existeAnalisis.rows.length) {
+        await consulta(
+          `UPDATE analisis_causa_raiz SET metodo=$1, descripcion_problema=$2, causa_raiz=$3, actualizado_por=$4
+           WHERE no_conformidad_id=$5`,
+          [metodo_analisis || '5_porques', descripcion || '', causa_raiz || '', req.usuario.id, req.params.id]
+        );
+      } else {
+        await consulta(
+          `INSERT INTO analisis_causa_raiz (no_conformidad_id, metodo, descripcion_problema, causa_raiz, creado_por, actualizado_por)
+           VALUES ($1,$2,$3,$4,$5,$5)`,
+          [req.params.id, metodo_analisis || '5_porques', descripcion || '', causa_raiz || '', req.usuario.id]
+        );
+      }
+    }
+
     res.json({ exito: true, datos: resultado.rows[0] });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
@@ -89,6 +125,23 @@ const cambiarEstado = async (req, res) => {
     );
     if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'No conformidad no encontrada' });
     res.json({ exito: true, datos: resultado.rows[0] });
+  } catch (error) {
+    res.status(500).json({ exito: false, mensaje: error.message });
+  }
+};
+
+const verificar = async (req, res) => {
+  try {
+    const { fecha_verificacion, efectividad, observaciones_verificacion, evidencia_url } = req.body;
+    const resultado = await consulta(
+      `UPDATE no_conformidades 
+       SET fecha_verificacion=$1, efectividad=$2, observaciones_verificacion=$3, 
+           evidencia_url=$4, estado='verificado', actualizado_por=$5 
+       WHERE id=$6 RETURNING *`,
+      [fecha_verificacion, efectividad, observaciones_verificacion, evidencia_url, req.usuario.id, req.params.id]
+    );
+    if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'No conformidad no encontrada' });
+    res.json({ exito: true, datos: resultado.rows[0], mensaje: 'Verificación registrada correctamente' });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -286,9 +339,36 @@ const generarPDF = async (req, res) => {
     pagina.drawText('PLAN DE ACCIÓN', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
     y -= 25;
     for (const plan of planes.rows) {
-      pagina.drawText(`${plan.orden}. ${plan.actividad?.substring(0, 70)} — ${plan.estado}`, { x: 28, y, size: 8, font: fN, color: rgb(0, 0, 0) });
-      y -= 14;
+      pagina.drawText(`${plan.orden}. ${plan.actividad?.substring(0, 70)}`, { x: 28, y, size: 8, font: fB, color: rgb(0, 0, 0) });
+      y -= 12;
+      pagina.drawText(`   Responsable: ${plan.responsable_nombre} | Fecha límite: ${plan.fecha_limite ? new Date(plan.fecha_limite).toLocaleDateString('es-PE') : '—'} | Estado: ${plan.estado}`, { x: 28, y, size: 8, font: fN, color: rgb(0, 0, 0) });
+      y -= 16;
       if (y < 60) break;
+    }
+
+    if (n.estado === 'verificado') {
+      y -= 10;
+      pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 20, color: AZUL });
+      pagina.drawText('VERIFICACIÓN', { x: 28, y: y + 2, size: 10, font: fB, color: BLANCO });
+      y -= 25;
+      const getEfectividad = (ef) => {
+        if (ef === 'si') return 'Sí, fue efectiva';
+        if (ef === 'parcial') return 'Parcialmente efectiva';
+        if (ef === 'no') return 'No fue efectiva';
+        return '—';
+      };
+      fila('Fecha verificación', n.fecha_verificacion ? new Date(n.fecha_verificacion).toLocaleDateString('es-PE') : '—');
+      fila('Efectividad', getEfectividad(n.efectividad));
+      if (n.observaciones_verificacion) {
+        pagina.drawText('Observaciones:', { x: 20, y, size: 9, font: fB, color: AZUL });
+        y -= 18;
+        const obs = n.observaciones_verificacion;
+        for (let i = 0; i < obs.length; i += 80) {
+          pagina.drawText(obs.substring(i, i + 80), { x: 28, y, size: 8, font: fN, color: rgb(0, 0, 0) });
+          y -= 14;
+          if (y < 60) break;
+        }
+      }
     }
 
     pagina.drawLine({ start: { x: 20, y: 50 }, end: { x: width - 20, y: 50 }, thickness: 1, color: AZUL });
@@ -303,7 +383,7 @@ const generarPDF = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, actualizar, cambiarEstado, eliminar,
+module.exports = { listar, obtener, crear, actualizar, cambiarEstado, verificar, eliminar,
                    obtenerAnalisis, registrarAnalisis, actualizarAnalisis,
                    listarPlanes, crearPlan, actualizarPlan, cambiarEstadoPlan,
                    estadisticas, generarPDF };
