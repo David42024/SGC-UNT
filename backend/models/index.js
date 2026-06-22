@@ -470,12 +470,15 @@ db.Encuesta = sequelize.define('Encuesta', {
   titulo: { type: DataTypes.STRING(255), allowNull: false },
   descripcion: { type: DataTypes.TEXT },
   tipo_publico: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'estudiante' },
-  estado: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'borrador' },
+  estado: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'activo' },
   fecha_inicio: { type: DataTypes.DATEONLY },
   fecha_cierre: { type: DataTypes.DATEONLY },
   anonima: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   responsable_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'usuarios', key: 'id' } },
   total_respuestas: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  visibilidad: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'publica' },
+  privacidad: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'anonima' },
+  estructura_json: { type: DataTypes.JSONB },
   ...auditFields
 }, { tableName: 'encuestas' });
 
@@ -503,8 +506,24 @@ db.RespuestaEncuesta = sequelize.define('RespuestaEncuesta', {
   ip_origen: { type: DataTypes.STRING(45) }, // string representation of INET
   fecha_respuesta: { type: DataTypes.DATE, allowNull: false, defaultValue: Sequelize.NOW },
   completada: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  respuestas_json: { type: DataTypes.JSONB },
+  codigo_estudiante: { type: DataTypes.STRING(10) },
   ...auditFields
 }, { tableName: 'respuestas_encuesta' });
+
+// 34b. HistorialFechasEncuesta
+db.HistorialFechasEncuesta = sequelize.define('HistorialFechasEncuesta', {
+  id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+  encuesta_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'encuestas', key: 'id' } },
+  usuario_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'usuarios', key: 'id' } },
+  fecha_inicio_anterior: { type: DataTypes.DATEONLY },
+  fecha_cierre_anterior: { type: DataTypes.DATEONLY },
+  fecha_inicio_nueva: { type: DataTypes.DATEONLY },
+  fecha_cierre_nueva: { type: DataTypes.DATEONLY },
+  tipo_ajuste: { type: DataTypes.STRING(20), allowNull: false },
+  motivo: { type: DataTypes.TEXT, allowNull: false },
+  creado_en: { type: DataTypes.DATE, allowNull: false, defaultValue: Sequelize.NOW }
+}, { tableName: 'historial_fechas_encuesta', timestamps: false });
 
 // 34. DetalleRespuesta
 db.DetalleRespuesta = sequelize.define('DetalleRespuesta', {
@@ -631,6 +650,10 @@ db.Encuesta.hasMany(db.PreguntaEncuesta, { foreignKey: 'encuesta_id', as: 'pregu
 db.RespuestaEncuesta.belongsTo(db.Encuesta, { foreignKey: 'encuesta_id', as: 'encuesta' });
 db.RespuestaEncuesta.belongsTo(db.Usuario, { foreignKey: 'respondente_id', as: 'respondente' });
 db.Encuesta.hasMany(db.RespuestaEncuesta, { foreignKey: 'encuesta_id', as: 'respuestas' });
+
+db.HistorialFechasEncuesta.belongsTo(db.Encuesta, { foreignKey: 'encuesta_id', as: 'encuesta' });
+db.Encuesta.hasMany(db.HistorialFechasEncuesta, { foreignKey: 'encuesta_id', as: 'historialFechas' });
+db.HistorialFechasEncuesta.belongsTo(db.Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
 
 db.DetalleRespuesta.belongsTo(db.RespuestaEncuesta, { foreignKey: 'respuesta_id', as: 'respuesta' });
 db.RespuestaEncuesta.hasMany(db.DetalleRespuesta, { foreignKey: 'respuesta_id', as: 'detalles' });

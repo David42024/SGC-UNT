@@ -8,27 +8,29 @@
     "start": "next start"
   },
   "dependencies": {
+    "axios": "^1.6.8",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "js-cookie": "^3.0.5",
+    "lucide-react": "^0.383.0",
     "next": "16.2.9",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "axios": "^1.6.8",
-    "recharts": "^2.12.7",
     "react-hook-form": "^7.51.5",
     "react-hot-toast": "^2.4.1",
-    "lucide-react": "^0.383.0",
-    "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
-    "js-cookie": "^3.0.5"
+    "recharts": "^2.12.7",
+    "survey-core": "^2.5.29",
+    "survey-react-ui": "^2.5.29"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "tailwindcss": "^3.4.3",
-    "postcss": "^8",
     "autoprefixer": "^10",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9"
+    "eslint-config-next": "16.2.9",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.3"
   },
   "overrides": {
     "react": "19.2.7",

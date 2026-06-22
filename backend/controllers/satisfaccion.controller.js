@@ -1,12 +1,28 @@
 const { consulta } = require('../config/db');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 
+const obtenerEstadoDinamico = (encuesta) => {
+  if (encuesta.estado === 'suspendido') {
+    return 'suspendido';
+  }
+  const hoy = new Date().toISOString().slice(0, 10);
+  const inicio = encuesta.fecha_inicio ? new Date(encuesta.fecha_inicio).toISOString().slice(0, 10) : null;
+  const cierre = encuesta.fecha_cierre ? new Date(encuesta.fecha_cierre).toISOString().slice(0, 10) : null;
+
+  if (inicio && hoy < inicio) {
+    return 'pendiente';
+  }
+  if (cierre && hoy > cierre) {
+    return 'finalizado';
+  }
+  return 'en_progreso';
+};
+
 const listar = async (req, res) => {
   try {
     const { estado, tipo_publico } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
-    if (estado)       { params.push(estado);       where += ` AND e.estado=$${params.length}`; }
     if (tipo_publico) { params.push(tipo_publico); where += ` AND e.tipo_publico=$${params.length}`; }
 
     const resultado = await consulta(
@@ -17,7 +33,17 @@ const listar = async (req, res) => {
        LEFT JOIN preguntas_encuesta p ON p.encuesta_id=e.id
        ${where} GROUP BY e.id, u.nombres, u.apellidos ORDER BY e.creado_en DESC`, params
     );
-    res.json({ exito: true, datos: resultado.rows });
+    
+    let datos = resultado.rows.map(e => ({
+      ...e,
+      estado: obtenerEstadoDinamico(e)
+    }));
+
+    if (estado) {
+      datos = datos.filter(e => e.estado === estado);
+    }
+
+    res.json({ exito: true, datos });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -30,7 +56,8 @@ const obtener = async (req, res) => {
        FROM encuestas e LEFT JOIN usuarios u ON u.id=e.responsable_id WHERE e.id=$1`, [req.params.id]
     );
     if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
-    res.json({ exito: true, datos: resultado.rows[0] });
+    const e = resultado.rows[0];
+    res.json({ exito: true, datos: { ...e, estado: obtenerEstadoDinamico(e) } });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -38,15 +65,20 @@ const obtener = async (req, res) => {
 
 const crear = async (req, res) => {
   try {
-    const { titulo, descripcion, tipo_publico, fecha_inicio, fecha_cierre, anonima, responsable_id } = req.body;
+    const { titulo, descripcion, fecha_inicio, fecha_cierre, anonima, visibilidad, privacidad, estructura_json } = req.body;
+    const tPub = (visibilidad === 'estudiante') ? 'estudiante' : 'todos';
+    const respId = req.usuario.id;
+
     const resultado = await consulta(
       `INSERT INTO encuestas (titulo, descripcion, tipo_publico, fecha_inicio, fecha_cierre,
-       anonima, responsable_id, creado_por, actualizado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING *`,
-      [titulo, descripcion, tipo_publico, fecha_inicio || null, fecha_cierre || null,
-       anonima !== false, responsable_id, req.usuario.id]
+       anonima, responsable_id, visibilidad, privacidad, estructura_json, creado_por, actualizado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING *`,
+      [titulo, descripcion, tPub, fecha_inicio || null, fecha_cierre || null,
+       anonima !== false, respId, visibilidad || 'publica', privacidad || 'anonima',
+       estructura_json ? (typeof estructura_json === 'string' ? estructura_json : JSON.stringify(estructura_json)) : null, req.usuario.id]
     );
-    res.status(201).json({ exito: true, datos: resultado.rows[0], mensaje: 'Encuesta creada exitosamente' });
+    const enc = resultado.rows[0];
+    res.status(201).json({ exito: true, datos: { ...enc, estado: obtenerEstadoDinamico(enc) }, mensaje: 'Encuesta creada exitosamente' });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -54,16 +86,26 @@ const crear = async (req, res) => {
 
 const actualizar = async (req, res) => {
   try {
-    const { titulo, descripcion, tipo_publico, fecha_inicio, fecha_cierre, anonima, responsable_id } = req.body;
+    const { titulo, descripcion, fecha_inicio, fecha_cierre, anonima, visibilidad, privacidad, estructura_json } = req.body;
+    
+    const queryOriginal = await consulta('SELECT responsable_id FROM encuestas WHERE id=$1', [req.params.id]);
+    if (!queryOriginal.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
+    const original = queryOriginal.rows[0];
+    const respId = original.responsable_id || req.usuario.id;
+    const tPub = (visibilidad === 'estudiante') ? 'estudiante' : 'todos';
+
     const resultado = await consulta(
       `UPDATE encuestas SET titulo=$1, descripcion=$2, tipo_publico=$3, fecha_inicio=$4,
-       fecha_cierre=$5, anonima=$6, responsable_id=$7, actualizado_por=$8
-       WHERE id=$9 RETURNING *`,
-      [titulo, descripcion, tipo_publico, fecha_inicio || null, fecha_cierre || null,
-       anonima !== false, responsable_id, req.usuario.id, req.params.id]
+       fecha_cierre=$5, anonima=$6, responsable_id=$7, visibilidad=$8, privacidad=$9,
+       estructura_json=$10, actualizado_por=$11
+       WHERE id=$12 RETURNING *`,
+      [titulo, descripcion, tPub, fecha_inicio || null, fecha_cierre || null,
+       anonima !== false, respId, visibilidad || 'publica', privacidad || 'anonima',
+       estructura_json ? (typeof estructura_json === 'string' ? estructura_json : JSON.stringify(estructura_json)) : null, req.usuario.id, req.params.id]
     );
     if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
-    res.json({ exito: true, datos: resultado.rows[0] });
+    const enc = resultado.rows[0];
+    res.json({ exito: true, datos: { ...enc, estado: obtenerEstadoDinamico(enc) } });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -71,13 +113,24 @@ const actualizar = async (req, res) => {
 
 const cambiarEstado = async (req, res) => {
   try {
-    const { estado } = req.body;
+    const { estado } = req.body; // 'suspendido' o 'activo'
+    
+    if (estado === 'suspendido') {
+      const queryEnc = await consulta('SELECT * FROM encuestas WHERE id=$1', [req.params.id]);
+      if (!queryEnc.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
+      const enc = queryEnc.rows[0];
+      if (obtenerEstadoDinamico(enc) === 'finalizado') {
+        return res.status(400).json({ exito: false, mensaje: 'No se puede suspender una encuesta finalizada' });
+      }
+    }
+
     const resultado = await consulta(
       'UPDATE encuestas SET estado=$1, actualizado_por=$2 WHERE id=$3 RETURNING *',
-      [estado, req.usuario.id, req.params.id]
+      [estado === 'suspendido' ? 'suspendido' : 'activo', req.usuario.id, req.params.id]
     );
     if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
-    res.json({ exito: true, datos: resultado.rows[0] });
+    const enc = resultado.rows[0];
+    res.json({ exito: true, datos: { ...enc, estado: obtenerEstadoDinamico(enc) } });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -147,12 +200,17 @@ const eliminarPregunta = async (req, res) => {
 const responder = async (req, res) => {
   try {
     const { tipo_respondente, respuestas } = req.body;
-    // respuestas: [{ pregunta_id, valor_numerico, valor_texto, valor_opcion }]
 
-    const encuesta = await consulta(
-      'SELECT * FROM encuestas WHERE id=$1 AND estado=$2', [req.params.id, 'publicada']
+    const queryEnc = await consulta(
+      'SELECT * FROM encuestas WHERE id=$1', [req.params.id]
     );
-    if (!encuesta.rows.length) return res.status(400).json({ exito: false, mensaje: 'Encuesta no disponible' });
+    if (!queryEnc.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
+
+    const enc = queryEnc.rows[0];
+    const estadoCalculado = obtenerEstadoDinamico(enc);
+    if (estadoCalculado !== 'en_progreso') {
+      return res.status(400).json({ exito: false, mensaje: 'La encuesta no está abierta para recibir respuestas' });
+    }
 
     const respuesta = await consulta(
       `INSERT INTO respuestas_encuesta (encuesta_id, respondente_id, tipo_respondente, ip_origen, completada, creado_por, actualizado_por)
@@ -168,7 +226,7 @@ const responder = async (req, res) => {
       );
     }
 
-    await consulta('UPDATE encuestas SET total_respuestas = total_respuestas + 1 WHERE id=$1', [req.params.id]);
+    await consulta('UPDATE encuestas SET total_respuestas = total_respuestas + 1 WHERE id=$1', [enc.id]);
     res.status(201).json({ exito: true, mensaje: 'Respuesta registrada exitosamente', token: respuesta.rows[0].token_respuesta });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
@@ -182,7 +240,43 @@ const listarRespuestas = async (req, res) => {
        FROM respuestas_encuesta re LEFT JOIN usuarios u ON u.id=re.respondente_id
        WHERE re.encuesta_id=$1 ORDER BY re.fecha_respuesta DESC`, [req.params.id]
     );
-    res.json({ exito: true, datos: resultado.rows });
+
+    const respuestas = resultado.rows;
+    const tieneLegacy = respuestas.some(r => !r.respuestas_json);
+
+    if (tieneLegacy && respuestas.length > 0) {
+      const detalles = await consulta(
+        `SELECT dr.*, p.tipo_pregunta 
+         FROM detalle_respuestas dr
+         JOIN respuestas_encuesta re ON re.id = dr.respuesta_id
+         JOIN preguntas_encuesta p ON p.id = dr.pregunta_id
+         WHERE re.encuesta_id = $1`, [req.params.id]
+      );
+
+      const detallesPorRespuesta = {};
+      detalles.rows.forEach(d => {
+        if (!detallesPorRespuesta[d.respuesta_id]) {
+          detallesPorRespuesta[d.respuesta_id] = {};
+        }
+        let valor = null;
+        if (d.valor_numerico !== null) {
+          valor = Number(d.valor_numerico);
+        } else if (d.valor_opcion !== null) {
+          valor = d.valor_opcion;
+        } else if (d.valor_texto !== null) {
+          valor = d.valor_texto;
+        }
+        detallesPorRespuesta[d.respuesta_id][d.pregunta_id] = valor;
+      });
+
+      respuestas.forEach(r => {
+        if (!r.respuestas_json) {
+          r.respuestas_json = detallesPorRespuesta[r.id] || {};
+        }
+      });
+    }
+
+    res.json({ exito: true, datos: respuestas });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
@@ -190,6 +284,110 @@ const listarRespuestas = async (req, res) => {
 
 const resultados = async (req, res) => {
   try {
+    const queryEnc = await consulta('SELECT * FROM encuestas WHERE id=$1', [req.params.id]);
+    if (!queryEnc.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
+    const enc = queryEnc.rows[0];
+
+    // Si es una encuesta basada en SurveyJS
+    if (enc.estructura_json) {
+      let schema = {};
+      try {
+        schema = typeof enc.estructura_json === 'string' ? JSON.parse(enc.estructura_json) : enc.estructura_json;
+      } catch (err) {
+        schema = {};
+      }
+
+      const questions = [];
+      if (schema && Array.isArray(schema.pages)) {
+        schema.pages.forEach(page => {
+          if (Array.isArray(page.elements)) {
+            page.elements.forEach(el => {
+              questions.push(el);
+            });
+          }
+        });
+      }
+
+      const respuestasQuery = await consulta(
+        'SELECT respuestas_json FROM respuestas_encuesta WHERE encuesta_id = $1 AND completada = true',
+        [req.params.id]
+      );
+      const respuestasList = respuestasQuery.rows.map(r => r.respuestas_json).filter(Boolean);
+
+      const resultadosPorPregunta = questions.map((q, idx) => {
+        const valores = respuestasList.map(r => r[q.name]).filter(v => v !== undefined && v !== null);
+
+        let media = null;
+        let moda = null;
+        let conteoOpciones = {};
+        let respuestasTexto = [];
+
+        if (q.type === 'rating') {
+          const nums = valores.map(v => parseFloat(v)).filter(n => !isNaN(n));
+          if (nums.length) {
+            media = (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2);
+            moda = calcularModa(nums);
+          }
+        } else if (q.type === 'comment' || q.type === 'text') {
+          respuestasTexto = valores.map(v => String(v).trim()).filter(Boolean);
+        } else if (['radiogroup', 'dropdown', 'checkbox', 'boolean'].includes(q.type)) {
+          valores.forEach(v => {
+            if (Array.isArray(v)) {
+              v.forEach(item => {
+                const key = String(item);
+                conteoOpciones[key] = (conteoOpciones[key] || 0) + 1;
+              });
+            } else {
+              const key = String(v);
+              conteoOpciones[key] = (conteoOpciones[key] || 0) + 1;
+            }
+          });
+        } else if (q.type === 'file') {
+          respuestasTexto = valores.map(v => {
+            if (Array.isArray(v)) {
+              return v.map(f => `Archivo: ${f.name} (${f.type || 'tipo desconocido'})`).join(', ');
+            } else if (v && typeof v === 'object') {
+              return `Archivo: ${v.name} (${v.type || 'tipo desconocido'})`;
+            }
+            try {
+              const parsed = typeof v === 'string' ? JSON.parse(v) : v;
+              if (Array.isArray(parsed)) {
+                return parsed.map(f => `Archivo: ${f.name} (${f.type || 'tipo desconocido'})`).join(', ');
+              }
+            } catch (e) {}
+            return String(v);
+          }).filter(Boolean);
+        } else {
+          // Tipos no estructurados: los guardamos como texto
+          respuestasTexto = valores.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v).trim()).filter(Boolean);
+        }
+
+        const tipoPregunta = q.type === 'rating' ? 'likert' :
+                             (q.type === 'comment' || q.type === 'text') ? 'texto_abierto' :
+                             (['radiogroup', 'dropdown', 'checkbox', 'boolean'].includes(q.type)) ? 'opcion_multiple' : 'texto_abierto';
+
+        return {
+          pregunta: {
+            id: idx + 1,
+            orden: idx + 1,
+            texto: q.title || q.name,
+            tipo_pregunta: tipoPregunta,
+            escala_min: 1,
+            escala_max: q.rateMax || 5
+          },
+          total_respuestas: valores.length,
+          media,
+          moda,
+          nps: null,
+          conteo_opciones: conteoOpciones,
+          respuestas_texto: respuestasTexto
+        };
+      });
+
+      return res.json({ exito: true, datos: resultadosPorPregunta });
+    }
+
+    // Código legacy para encuestas de preguntas individuales de base de datos
     const preguntas = await consulta(
       'SELECT * FROM preguntas_encuesta WHERE encuesta_id=$1 ORDER BY orden', [req.params.id]
     );
@@ -262,26 +460,72 @@ const estadisticas = async (req, res) => {
 
 const generarPDF = async (req, res) => {
   try {
-    const [encuesta, preguntas] = await Promise.all([
-      consulta(`SELECT e.*, u.nombres||' '||u.apellidos AS responsable_nombre
-                FROM encuestas e LEFT JOIN usuarios u ON u.id=e.responsable_id WHERE e.id=$1`, [req.params.id]),
-      consulta('SELECT * FROM preguntas_encuesta WHERE encuesta_id=$1 ORDER BY orden', [req.params.id])
-    ]);
-    if (!encuesta.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
-    const enc = encuesta.rows[0];
+    const queryEnc = await consulta(
+      `SELECT e.*, u.nombres||' '||u.apellidos AS responsable_nombre
+       FROM encuestas e LEFT JOIN usuarios u ON u.id=e.responsable_id WHERE e.id=$1`,
+      [req.params.id]
+    );
+    if (!queryEnc.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
+    const enc = queryEnc.rows[0];
 
-    // Calcular estadísticas para cada pregunta
-    const estadsPorPregunta = await Promise.all(preguntas.rows.map(async (p) => {
-      const vals = await consulta(
-        `SELECT dr.valor_numerico FROM detalle_respuestas dr
-         JOIN respuestas_encuesta re ON re.id=dr.respuesta_id
-         WHERE dr.pregunta_id=$1 AND re.encuesta_id=$2 AND dr.valor_numerico IS NOT NULL`,
-        [p.id, req.params.id]
+    let estadsPorPregunta = [];
+
+    if (enc.estructura_json) {
+      let schema = {};
+      try {
+        schema = typeof enc.estructura_json === 'string' ? JSON.parse(enc.estructura_json) : enc.estructura_json;
+      } catch (err) {
+        schema = {};
+      }
+
+      const questions = [];
+      if (schema && Array.isArray(schema.pages)) {
+        schema.pages.forEach(page => {
+          if (Array.isArray(page.elements)) {
+            page.elements.forEach(el => {
+              questions.push(el);
+            });
+          }
+        });
+      }
+
+      const respuestasQuery = await consulta(
+        'SELECT respuestas_json FROM respuestas_encuesta WHERE encuesta_id = $1 AND completada = true',
+        [req.params.id]
       );
-      const nums = vals.rows.map(r => parseFloat(r.valor_numerico)).filter(n => !isNaN(n));
-      const media = nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2) : '—';
-      return { ...p, media, total_resp: nums.length };
-    }));
+      const respuestasList = respuestasQuery.rows.map(r => r.respuestas_json).filter(Boolean);
+
+      estadsPorPregunta = questions.map((q, idx) => {
+        const valores = respuestasList.map(r => r[q.name]).filter(v => v !== undefined && v !== null);
+        let media = '—';
+        if (q.type === 'rating') {
+          const nums = valores.map(v => parseFloat(v)).filter(n => !isNaN(n));
+          if (nums.length) {
+            media = (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2);
+          }
+        }
+        return {
+          orden: idx + 1,
+          texto: q.title || q.name,
+          tipo_pregunta: q.type,
+          media,
+          total_resp: valores.length
+        };
+      });
+    } else {
+      const preguntas = await consulta('SELECT * FROM preguntas_encuesta WHERE encuesta_id=$1 ORDER BY orden', [req.params.id]);
+      estadsPorPregunta = await Promise.all(preguntas.rows.map(async (p) => {
+        const vals = await consulta(
+          `SELECT dr.valor_numerico FROM detalle_respuestas dr
+           JOIN respuestas_encuesta re ON re.id=dr.respuesta_id
+           WHERE dr.pregunta_id=$1 AND re.encuesta_id=$2 AND dr.valor_numerico IS NOT NULL`,
+          [p.id, req.params.id]
+        );
+        const nums = vals.rows.map(r => parseFloat(r.valor_numerico)).filter(n => !isNaN(n));
+        const media = nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2) : '—';
+        return { ...p, media, total_resp: nums.length };
+      }));
+    }
 
     const pdfDoc = await PDFDocument.create();
     const pagina = pdfDoc.addPage([595, 842]);
@@ -331,6 +575,168 @@ const generarPDF = async (req, res) => {
   }
 };
 
+const cambiarFechas = async (req, res) => {
+  try {
+    const { fecha_inicio_nueva, fecha_cierre_nueva, motivo } = req.body;
+    if (!motivo) return res.status(400).json({ exito: false, mensaje: 'Debe ingresar un motivo para el cambio de fechas' });
+
+    const queryEnc = await consulta('SELECT * FROM encuestas WHERE id=$1', [req.params.id]);
+    if (!queryEnc.rows.length) return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
+    
+    const enc = queryEnc.rows[0];
+    
+    // Convertir de forma segura a strings tipo YYYY-MM-DD
+    const formatDate = (d) => {
+      if (!d) return null;
+      try {
+        return new Date(d).toISOString().slice(0, 10);
+      } catch {
+        return null;
+      }
+    };
+    
+    const fecha_inicio_anterior = formatDate(enc.fecha_inicio);
+    const fecha_cierre_anterior = formatDate(enc.fecha_cierre);
+
+    let tipo_ajuste = 'ampliacion';
+    if (fecha_cierre_anterior && fecha_cierre_nueva) {
+      if (new Date(fecha_cierre_nueva) < new Date(fecha_cierre_anterior)) {
+        tipo_ajuste = 'reduccion';
+      }
+    }
+
+    const { HistorialFechasEncuesta } = require('../models');
+    
+    await HistorialFechasEncuesta.create({
+      encuesta_id: enc.id,
+      usuario_id: req.usuario.id,
+      fecha_inicio_anterior,
+      fecha_cierre_anterior,
+      fecha_inicio_nueva: fecha_inicio_nueva || null,
+      fecha_cierre_nueva: fecha_cierre_nueva || null,
+      tipo_ajuste,
+      motivo
+    });
+
+    const resultado = await consulta(
+      `UPDATE encuestas SET fecha_inicio=$1, fecha_cierre=$2, actualizado_por=$3 WHERE id=$4 RETURNING *`,
+      [fecha_inicio_nueva || null, fecha_cierre_nueva || null, req.usuario.id, enc.id]
+    );
+
+    const updated = resultado.rows[0];
+    res.json({ 
+      exito: true, 
+      datos: { ...updated, estado: obtenerEstadoDinamico(updated) }, 
+      mensaje: `Fechas actualizadas exitosamente (${tipo_ajuste === 'ampliacion' ? 'Ampliación' : 'Reducción'})` 
+    });
+  } catch (error) {
+    res.status(500).json({ exito: false, mensaje: error.message });
+  }
+};
+
+const listarPublicas = async (req, res) => {
+  try {
+    const resultado = await consulta(
+      `SELECT id, uuid, titulo, descripcion, tipo_publico, estado, fecha_inicio, fecha_cierre, anonima, visibilidad, privacidad
+       FROM encuestas
+       WHERE visibilidad IN ('publica', 'estudiante') AND estado != 'suspendido'
+       ORDER BY creado_en DESC`
+    );
+
+    const activas = resultado.rows.map(e => ({
+      ...e,
+      estado: obtenerEstadoDinamico(e)
+    })).filter(e => e.estado === 'en_progreso');
+
+    res.json({ exito: true, datos: activas });
+  } catch (error) {
+    res.status(500).json({ exito: false, mensaje: error.message });
+  }
+};
+
+const obtenerPublicaPorUuid = async (req, res) => {
+  try {
+    const resultado = await consulta(
+      `SELECT id, uuid, titulo, descripcion, tipo_publico, estado, fecha_inicio, fecha_cierre, anonima, visibilidad, privacidad, estructura_json
+       FROM encuestas WHERE uuid=$1`,
+      [req.params.uuid]
+    );
+    if (!resultado.rows.length) {
+      return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada o no disponible' });
+    }
+
+    const enc = resultado.rows[0];
+    const estadoCalculado = obtenerEstadoDinamico(enc);
+
+    if (enc.visibilidad === 'privada') {
+      return res.status(403).json({ exito: false, mensaje: 'Esta encuesta es privada y requiere inicio de sesión' });
+    }
+    
+    if (estadoCalculado === 'suspendido') {
+      return res.status(403).json({ exito: false, mensaje: 'Esta encuesta ha sido suspendida temporalmente' });
+    }
+    if (estadoCalculado === 'pendiente') {
+      return res.status(403).json({ exito: false, mensaje: 'Esta encuesta aún no ha iniciado' });
+    }
+    if (estadoCalculado === 'finalizado') {
+      return res.status(403).json({ exito: false, mensaje: 'Esta encuesta ya ha finalizado' });
+    }
+
+    res.json({ exito: true, datos: enc });
+  } catch (error) {
+    res.status(500).json({ exito: false, mensaje: error.message });
+  }
+};
+
+const responderPublica = async (req, res) => {
+  try {
+    const { codigo_estudiante, respuestas } = req.body;
+
+    const resultado = await consulta(
+      `SELECT * FROM encuestas WHERE uuid=$1`, [req.params.uuid]
+    );
+    if (!resultado.rows.length) {
+      return res.status(404).json({ exito: false, mensaje: 'Encuesta no encontrada' });
+    }
+
+    const enc = resultado.rows[0];
+    const estadoCalculado = obtenerEstadoDinamico(enc);
+
+    if (estadoCalculado !== 'en_progreso') {
+      return res.status(400).json({ exito: false, mensaje: 'La encuesta no está abierta para recibir respuestas' });
+    }
+
+    if (enc.visibilidad === 'estudiante') {
+      if (!codigo_estudiante || !/^\d{10}$/.test(codigo_estudiante)) {
+        return res.status(400).json({ exito: false, mensaje: 'Debe proporcionar un código de estudiante válido de 10 dígitos' });
+      }
+    }
+
+    const codEst = (enc.privacidad === 'no_anonima' && enc.visibilidad === 'estudiante') ? codigo_estudiante : null;
+
+    const { RespuestaEncuesta } = require('../models');
+
+    const respuesta = await RespuestaEncuesta.create({
+      encuesta_id: enc.id,
+      tipo_respondente: enc.visibilidad === 'estudiante' ? 'estudiante' : 'publico',
+      completada: true,
+      respuestas_json: respuestas,
+      codigo_estudiante: codEst
+    });
+
+    await consulta('UPDATE encuestas SET total_respuestas = total_respuestas + 1 WHERE id=$1', [enc.id]);
+
+    res.status(201).json({ 
+      exito: true, 
+      mensaje: 'Respuestas registradas exitosamente', 
+      token: respuesta.token_respuesta 
+    });
+  } catch (error) {
+    res.status(500).json({ exito: false, mensaje: error.message });
+  }
+};
+
 module.exports = { listar, obtener, crear, actualizar, cambiarEstado, eliminar,
                    listarPreguntas, crearPregunta, actualizarPregunta, eliminarPregunta,
-                   responder, listarRespuestas, resultados, estadisticas, generarPDF };
+                   responder, listarRespuestas, resultados, estadisticas, generarPDF,
+                   cambiarFechas, listarPublicas, obtenerPublicaPorUuid, responderPublica };

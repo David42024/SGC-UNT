@@ -657,13 +657,18 @@ CREATE TABLE IF NOT EXISTS encuestas (
     descripcion     TEXT,
     tipo_publico    VARCHAR(20)   NOT NULL DEFAULT 'estudiante'
                         CHECK (tipo_publico IN ('estudiante','docente','egresado','administrativo','todos')),
-    estado          VARCHAR(20)   NOT NULL DEFAULT 'borrador'
-                        CHECK (estado IN ('borrador','publicada','cerrada')),
+    estado          VARCHAR(20)   NOT NULL DEFAULT 'activo'
+                        CHECK (estado IN ('activo','suspendido')),
     fecha_inicio    DATE,
     fecha_cierre    DATE,
     anonima         BOOLEAN      NOT NULL DEFAULT TRUE,
     responsable_id  INTEGER      NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
     total_respuestas INTEGER     NOT NULL DEFAULT 0,
+    visibilidad     VARCHAR(20)   NOT NULL DEFAULT 'publica'
+                        CHECK (visibilidad IN ('privada','estudiante','publica')),
+    privacidad      VARCHAR(20)   NOT NULL DEFAULT 'anonima'
+                        CHECK (privacidad IN ('anonima','no_anonima')),
+    estructura_json JSONB,
     creado_en       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     actualizado_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     creado_por      INTEGER      REFERENCES usuarios(id) ON DELETE SET NULL,
@@ -699,12 +704,27 @@ CREATE TABLE IF NOT EXISTS respuestas_encuesta (
     ip_origen       INET,
     fecha_respuesta TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     completada      BOOLEAN      NOT NULL DEFAULT FALSE,
+    respuestas_json JSONB,
+    codigo_estudiante VARCHAR(10),
     creado_en       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     actualizado_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     creado_por      INTEGER      REFERENCES usuarios(id) ON DELETE SET NULL,
     actualizado_por INTEGER      REFERENCES usuarios(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_respuestas_encuesta_id ON respuestas_encuesta(encuesta_id);
+
+CREATE TABLE IF NOT EXISTS historial_fechas_encuesta (
+    id              SERIAL PRIMARY KEY,
+    encuesta_id     INTEGER      NOT NULL REFERENCES encuestas(id) ON DELETE CASCADE,
+    usuario_id      INTEGER      NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    fecha_inicio_anterior DATE,
+    fecha_cierre_anterior DATE,
+    fecha_inicio_nueva    DATE,
+    fecha_cierre_nueva    DATE,
+    tipo_ajuste     VARCHAR(20)  NOT NULL,
+    motivo          TEXT         NOT NULL,
+    creado_en       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS detalle_respuestas (
     id                  SERIAL PRIMARY KEY,
