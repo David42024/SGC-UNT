@@ -300,6 +300,15 @@ db.NoConformidad = sequelize.define('NoConformidad', {
   fecha_limite: { type: DataTypes.DATEONLY },
   fecha_cierre: { type: DataTypes.DATEONLY },
   impacto: { type: DataTypes.STRING(10), defaultValue: 'medio' },
+  fecha_verificacion: { type: DataTypes.DATEONLY },
+  efectividad: {
+    type: DataTypes.STRING(20),
+    validate: {
+      isIn: [['si', 'parcial', 'no']]
+    }
+  },
+  evidencia_url: { type: DataTypes.TEXT },
+  observaciones_verificacion: { type: DataTypes.TEXT },
   ...auditFields
 }, { tableName: 'no_conformidades' });
 

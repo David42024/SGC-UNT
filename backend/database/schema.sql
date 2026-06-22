@@ -429,6 +429,11 @@ CREATE TABLE IF NOT EXISTS no_conformidades (
     fecha_cierre     DATE,
     impacto          VARCHAR(10)   DEFAULT 'medio'
                          CHECK (impacto IN ('bajo','medio','alto','critico')),
+    fecha_verificacion DATE,
+    efectividad      VARCHAR(20)
+                         CHECK (efectividad IN ('si','parcial','no')),
+    evidencia_url    TEXT,
+    observaciones_verificacion TEXT,
     creado_en        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     actualizado_en   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     creado_por       INTEGER       REFERENCES usuarios(id) ON DELETE SET NULL,
