@@ -1,4 +1,9 @@
-asado en el documento oficial de la UNT (código DP-OC-001, versión 02) y la estructura actual del sistema, aquí está la distribución:
+# Distribución de Responsabilidades y Tareas
+
+> [!NOTE]
+> **Documento Padre**: Este documento está subordinado a las directrices y estándares establecidos en la constitución del proyecto en [specs/CONSTITUTION.md].
+
+Basado en el documento oficial de la UNT (código DP-OC-001, versión 02) y la estructura actual del sistema, aquí está la distribución:
 
 Contexto del documento oficial
 El PDF define 12 indicadores reales agrupados en 5 objetivos estratégicos:
