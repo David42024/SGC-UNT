@@ -29,6 +29,9 @@ const COLORES_ESTADO = {
   rojo: 'bg-red-100 text-red-700',
   activo: 'bg-green-100 text-green-700',
   inactivo: 'bg-gray-100 text-gray-600',
+  pendiente: 'bg-yellow-100 text-yellow-700',
+  suspendido: 'bg-red-100 text-red-700',
+  en_progreso: 'bg-blue-100 text-blue-700',
 };
 
 export function Badge({ estado, className }) {

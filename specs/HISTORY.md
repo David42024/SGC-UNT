@@ -8,6 +8,11 @@ Cualquier cambio técnico o de requerimientos debe ser anexado a este documento 
 
 ## Registro de Cambios
 
+### [2026-06-22] - Planificación de Encuestas con SurveyJS
+* **Autor**: Roberto / Asistente AI
+* **Cambios realizados**:
+  * Diseñado y creado el archivo de especificaciones de cambio en [specs/changes/plan-encuestas-surveyjs.md](file:///home/robertoa1/Documentos/SGC-UNT/specs/changes/plan-encuestas-surveyjs.md) para el módulo de Satisfacción con SurveyJS.
+
 ### [2026-06-22] - Migración a Sequelize y Gobernanza de Especificaciones
 * **Autor**: Roberto / Asistente AI
 * **Cambios realizados**:

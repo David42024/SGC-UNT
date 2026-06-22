@@ -24,7 +24,7 @@ const verificarToken = async (req, res, next) => {
     req.usuario = resultado.rows[0];
     next();
   } catch (error) {
-    return res.status(403).json({ exito: false, mensaje: 'Token inválido o expirado' });
+    return res.status(401).json({ exito: false, mensaje: 'Token inválido o expirado' });
   }
 };
 
