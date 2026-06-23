@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
-import { Award, Plus, Search, Download, Edit, Trash2, RefreshCw, ChevronRight, ChevronDown, FileCheck, AlertCircle } from 'lucide-react';
+import { Award, Plus, Search, Download, Edit, Trash2, RefreshCw, ChevronRight, ChevronDown, FileCheck, AlertCircle, Eye } from 'lucide-react';
 import { Badge, CargandoPagina, Modal, ModalConfirmar, EstadoVacio, PageHeader, Campo, StatCard } from '../../components/ui';
 import clsx from 'clsx';
 
@@ -20,6 +21,7 @@ const colorEstado = (e) => ({
 const colorSemaforo = (pct) => pct >= 75 ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-500';
 
 export default function AcreditacionPage() {
+  const router = useRouter();
   const [autoevals, setAutoevals]   = useState([]);
   const [modelos, setModelos]       = useState([]);
   const [usuarios, setUsuarios]     = useState([]);
@@ -38,18 +40,29 @@ export default function AcreditacionPage() {
   const [guardando, setGuardando]   = useState(false);
   const [buscar, setBuscar]         = useState('');
 
+  const abrirDetalle = (ae) => {
+    router.push(`/acreditacion/${ae.id}`);
+  };
+
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
+      console.log('🔍 Loading acreditacion data...');
       const [aeRes, modRes, usrRes] = await Promise.all([
-        api.get('/acreditacion/autoevaluaciones'),
-        api.get('/acreditacion/modelos'),
-        api.get('/usuarios'),
+        api.get('/test/acreditacion/autoevaluaciones'),
+        api.get('/test/acreditacion/modelos'),
+        api.get('/test/usuarios'),
       ]);
+      console.log('✅ aeRes:', aeRes.data);
+      console.log('✅ modRes:', modRes.data);
+      console.log('✅ usrRes:', usrRes.data);
       setAutoevals(aeRes.data.datos || []);
       setModelos(modRes.data.datos || []);
       setUsuarios(usrRes.data.datos || []);
-    } catch { toast.error('Error al cargar autoevaluaciones'); }
+    } catch (err) {
+      console.error('❌ Error al cargar autoevaluaciones:', err);
+      toast.error('Error al cargar autoevaluaciones: ' + (err.response?.data?.mensaje || err.message));
+    }
     finally  { setCargando(false); }
   }, []);
 
@@ -66,18 +79,32 @@ export default function AcreditacionPage() {
     setModalForm(true);
   };
 
+  const cargarEvidencias = async (autoevaluacionId) => {
+    try {
+      const [evidRes, avanceRes] = await Promise.all([
+        api.get(`/test/acreditacion/autoevaluaciones/${autoevaluacionId}/evidencias`),
+        // For now, let's just skip avanceRes to keep it simple, or we can add a test endpoint for avance
+        Promise.resolve({ data: { datos: null } })
+      ]);
+      setEvidencias(evidRes.data.datos || []);
+    } catch { 
+      toast.error('Error al cargar evidencias'); 
+    }
+  };
+
   const abrirEvidencias = async (ae) => {
     setSeleccionado(ae);
     try {
-      const [evidRes, avanceRes, estRes] = await Promise.all([
-        api.get(`/acreditacion/autoevaluaciones/${ae.id}/evidencias`),
-        api.get(`/acreditacion/autoevaluaciones/${ae.id}/avance`),
-        ae.modelo_id ? api.get(`/acreditacion/modelos/${ae.modelo_id}/estandares`) : Promise.resolve({ data: { datos: [] } }),
+      const [evidRes, estRes] = await Promise.all([
+        api.get(`/test/acreditacion/autoevaluaciones/${ae.id}/evidencias`),
+        ae.modelo_id ? api.get(`/test/acreditacion/modelos/${ae.modelo_id}/estandares`) : Promise.resolve({ data: { datos: [] } }),
       ]);
       setEvidencias(evidRes.data.datos || []);
-      setAvance(avanceRes.data.datos);
       setEstandares(estRes.data.datos || []);
-    } catch { toast.error('Error al cargar evidencias'); }
+    } catch (err) { 
+      console.error('❌ Error al cargar evidencias:', err);
+      toast.error('Error al cargar evidencias'); 
+    }
     setModalEvidencias(true);
   };
 
@@ -98,17 +125,15 @@ export default function AcreditacionPage() {
     if (!formEvid.estandar_id || !formEvid.descripcion) { toast.error('Seleccione estándar y añada descripción'); return; }
     setGuardando(true);
     try {
-      await api.post(`/acreditacion/autoevaluaciones/${seleccionado.id}/evidencias`, formEvid);
+      await api.post(`/test/acreditacion/autoevaluaciones/${seleccionado.id}/evidencias`, formEvid);
       toast.success('Evidencia registrada');
-      const [evidRes, avanceRes] = await Promise.all([
-        api.get(`/acreditacion/autoevaluaciones/${seleccionado.id}/evidencias`),
-        api.get(`/acreditacion/autoevaluaciones/${seleccionado.id}/avance`),
-      ]);
-      setEvidencias(evidRes.data.datos || []);
-      setAvance(avanceRes.data.datos);
+      await cargarEvidencias(seleccionado.id);
       setModalNuevaEvid(false);
       setFormEvid(EVID_VACIO);
-    } catch (err) { toast.error(err.response?.data?.mensaje || 'Error'); }
+    } catch (err) { 
+      console.error('❌ Error guardando evidencia:', err);
+      toast.error(err.response?.data?.mensaje || 'Error'); 
+    }
     finally       { setGuardando(false); }
   };
 
@@ -192,8 +217,11 @@ export default function AcreditacionPage() {
 
               {/* Acciones */}
               <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                <button onClick={() => abrirEvidencias(ae)} className="btn-primario flex-1 justify-center py-1.5">
-                  <FileCheck size={14} />Evidencias
+                <button onClick={() => abrirDetalle(ae)} className="btn-primario flex-1 justify-center py-1.5">
+                  <Eye size={14} />Ver detalle
+                </button>
+                <button onClick={() => abrirEvidencias(ae)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Evidencias">
+                  <FileCheck size={16} />
                 </button>
                 <button onClick={() => descargarPDF(ae.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Descargar PDF">
                   <Download size={16} />
@@ -254,7 +282,7 @@ export default function AcreditacionPage() {
       </Modal>
 
       {/* ── Modal evidencias ── */}
-      <Modal abierto={modalEvidencias} onCerrar={() => setModalEvidencias(false)} titulo={`Evidencias — ${seleccionado?.nombre}`} size="xl">
+      <Modal abierto={modalEvidencias} onCerrar={() => setModalEvidencias(false)} titulo={`Evidencias — ${seleccionado?.nombre}`} size="xl" cerrarAlClickFuera={false}>
         <div className="space-y-5">
           {/* Avance */}
           {avance && (
@@ -307,14 +335,50 @@ export default function AcreditacionPage() {
                       <span className="font-mono text-xs font-bold text-unt-azul">{ev.estandar_codigo}</span>
                       <span className="ml-2 text-sm font-medium text-gray-800">{ev.estandar_nombre}</span>
                     </div>
-                    <Badge estado={ev.estado_cumplimiento} />
+                    <select 
+                      className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1"
+                      value={ev.estado_cumplimiento}
+                      onChange={async (e) => {
+                        try {
+                          await api.put(`/test/evidencias/${ev.id}`, { 
+                            estado_cumplimiento: e.target.value, 
+                            porcentaje_cumplimiento: ev.porcentaje_cumplimiento 
+                          });
+                          cargarEvidencias(ev.autoevaluacion_id);
+                        } catch (error) {
+                          console.error('Error updating state:', error);
+                        }
+                      }}
+                    >
+                      {ESTADOS_EVID.map(s => (
+                        <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">{ev.descripcion}</p>
-                  {/* Barra de progreso */}
+                  {/* Barra de progreso editable */}
                   <div className="flex items-center gap-3">
                     <div className="flex-1 bg-white/60 rounded-full h-2 overflow-hidden">
                       <div className="h-full bg-current rounded-full transition-all" style={{ width: `${ev.porcentaje_cumplimiento}%` }} />
                     </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      value={ev.porcentaje_cumplimiento} 
+                      className="w-24 accent-unt-azul"
+                      onChange={async (e) => {
+                        try {
+                          await api.put(`/test/evidencias/${ev.id}`, { 
+                            estado_cumplimiento: ev.estado_cumplimiento, 
+                            porcentaje_cumplimiento: parseInt(e.target.value) 
+                          });
+                          cargarEvidencias(ev.autoevaluacion_id);
+                        } catch (error) {
+                          console.error('Error updating percentage:', error);
+                        }
+                      }}
+                    />
                     <span className="text-xs font-bold w-10 text-right">{ev.porcentaje_cumplimiento}%</span>
                   </div>
                   {ev.observaciones && <p className="text-xs text-gray-500 mt-2 italic">{ev.observaciones}</p>}
@@ -327,7 +391,7 @@ export default function AcreditacionPage() {
       </Modal>
 
       {/* ── Modal nueva evidencia ── */}
-      <Modal abierto={modalNuevaEvid} onCerrar={() => setModalNuevaEvid(false)} titulo="Registrar evidencia" size="md">
+      <Modal abierto={modalNuevaEvid} onCerrar={() => setModalNuevaEvid(false)} titulo="Registrar evidencia" size="md" cerrarAlClickFuera={false}>
         <form onSubmit={guardarEvidencia} className="space-y-4">
           <Campo label="Estándar / Criterio" required>
             <select className="campo" value={formEvid.estandar_id} onChange={e => setFormEvid({...formEvid, estandar_id: e.target.value})}>
