@@ -18,6 +18,15 @@ const obtenerEstadoDinamico = (encuesta) => {
   return 'en_progreso';
 };
 
+const obtenerTextoLocalizado = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    return val.es || val.default || Object.values(val)[0] || '';
+  }
+  return String(val);
+};
+
 const listar = async (req, res) => {
   try {
     const { estado, tipo_publico } = req.query;
@@ -370,7 +379,7 @@ const resultados = async (req, res) => {
           pregunta: {
             id: idx + 1,
             orden: idx + 1,
-            texto: q.title || q.name,
+            texto: obtenerTextoLocalizado(q.title || q.name),
             tipo_pregunta: tipoPregunta,
             escala_min: 1,
             escala_max: q.rateMax || 5
@@ -506,7 +515,7 @@ const generarPDF = async (req, res) => {
         }
         return {
           orden: idx + 1,
-          texto: q.title || q.name,
+          texto: obtenerTextoLocalizado(q.title || q.name),
           tipo_pregunta: q.type,
           media,
           total_resp: valores.length
