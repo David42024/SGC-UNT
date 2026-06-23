@@ -15,6 +15,15 @@ const PREG_VACIO   = { orden:1, texto:'', tipo_pregunta:'likert', obligatoria:tr
 const colorVisibilidad = { publica: 'bg-blue-100 text-blue-700', estudiante: 'bg-indigo-100 text-indigo-700', privada: 'bg-gray-100 text-gray-700' };
 const colorPrivacidad = { anonima: 'bg-green-100 text-green-700', no_anonima: 'bg-orange-100 text-orange-700' };
 
+const obtenerTextoLocalizado = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    return val.es || val.default || Object.values(val)[0] || '';
+  }
+  return String(val);
+};
+
 export default function SatisfaccionPage() {
   const [encuestas, setEncuestas]   = useState([]);
   const [usuarios, setUsuarios]     = useState([]);
@@ -240,7 +249,7 @@ export default function SatisfaccionPage() {
           return (
             <div key={idx} className="p-4 border border-gray-100 rounded-xl bg-white shadow-sm hover:border-gray-200 transition-colors">
               <p className="text-xs font-semibold text-gray-400 mb-1">Pregunta {idx + 1} — {q.type.toUpperCase()}</p>
-              <p className="font-medium text-gray-800 text-sm mb-3">{q.title || q.name}</p>
+              <p className="font-medium text-gray-800 text-sm mb-3">{obtenerTextoLocalizado(q.title || q.name)}</p>
 
               <div className="pl-3 border-l-2 border-unt-azul/30 py-0.5">
                 {!tieneRespuesta ? (
@@ -730,7 +739,7 @@ export default function SatisfaccionPage() {
                 <div key={i} className="border border-gray-200 rounded-xl p-4">
                   <div className="flex items-start gap-3 mb-3">
                     <span className="w-6 h-6 bg-unt-azul/10 rounded-full flex items-center justify-center text-unt-azul text-xs font-bold flex-shrink-0 mt-0.5">{res.pregunta?.orden}</span>
-                    <p className="font-medium text-gray-800 flex-1">{res.pregunta?.texto}</p>
+                    <p className="font-medium text-gray-800 flex-1">{obtenerTextoLocalizado(res.pregunta?.texto)}</p>
                     <Badge estado={res.pregunta?.tipo_pregunta} />
                   </div>
 
