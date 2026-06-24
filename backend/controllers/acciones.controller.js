@@ -275,13 +275,44 @@ const cambiarEstadoPlan = async (req, res) => {
 
 const estadisticas = async (req, res) => {
   try {
-    const [total, porTipo, porEstado, porImpacto] = await Promise.all([
+    const [total, porTipo, porEstado, porImpacto, planesStats] = await Promise.all([
       consulta('SELECT COUNT(*) AS total FROM no_conformidades'),
       consulta('SELECT tipo, COUNT(*) AS cantidad FROM no_conformidades GROUP BY tipo'),
       consulta('SELECT estado, COUNT(*) AS cantidad FROM no_conformidades GROUP BY estado'),
-      consulta('SELECT impacto, COUNT(*) AS cantidad FROM no_conformidades GROUP BY impacto')
+      consulta('SELECT impacto, COUNT(*) AS cantidad FROM no_conformidades GROUP BY impacto'),
+      consulta(`
+        SELECT
+          COUNT(*) FILTER (WHERE estado != 'completado' AND fecha_limite >= CURRENT_DATE) AS en_plazo,
+          COUNT(*) FILTER (WHERE estado != 'completado' AND fecha_limite < CURRENT_DATE) AS vencidas,
+          COUNT(*) FILTER (WHERE estado != 'completado' AND fecha_limite BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days') AS proximas_vencer,
+          COUNT(*) FILTER (WHERE estado = 'completado') AS completados,
+          COUNT(*) AS total_planes
+        FROM planes_accion_capa
+      `)
     ]);
-    res.json({ exito: true, datos: { total: parseInt(total.rows[0].total), por_tipo: porTipo.rows, por_estado: porEstado.rows, por_impacto: porImpacto.rows } });
+
+    const ps = planesStats.rows[0];
+    const totalPlanes = parseInt(ps.total_planes) || 0;
+    const completados = parseInt(ps.completados) || 0;
+    const tasa_cumplimiento = totalPlanes > 0 ? Math.round((completados / totalPlanes) * 100) : 0;
+
+    res.json({
+      exito: true,
+      datos: {
+        total: parseInt(total.rows[0].total),
+        por_tipo: porTipo.rows,
+        por_estado: porEstado.rows,
+        por_impacto: porImpacto.rows,
+        planes: {
+          en_plazo: parseInt(ps.en_plazo) || 0,
+          vencidas: parseInt(ps.vencidas) || 0,
+          proximas_vencer: parseInt(ps.proximas_vencer) || 0,
+          completados,
+          total: totalPlanes,
+          tasa_cumplimiento
+        }
+      }
+    });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
