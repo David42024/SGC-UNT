@@ -79,16 +79,16 @@ const dashboard = async (req, res) => {
                 WHERE mi.fecha_medicion >= NOW() - INTERVAL '6 months'
                 ORDER BY mi.fecha_medicion DESC LIMIT 50`)
     ]);
-    res.json({ 
-      exito: true, 
-      datos: { 
-        resumen: resumen.rows[0], 
-        ultimas_mediciones: ultimasMediciones.rows, 
+    res.json({
+      exito: true,
+      datos: {
+        resumen: resumen.rows[0],
+        ultimas_mediciones: ultimasMediciones.rows,
         alertas_pendientes: alertasPendientes.rows,
         por_modulo: porModulo.rows,
         por_semaforo: porSemaforo.rows,
         tendencias: tendencias.rows
-      } 
+      }
     });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
@@ -111,15 +111,15 @@ const obtener = async (req, res) => {
 const crear = async (req, res) => {
   try {
     const { codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida,
-            meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, parametros } = req.body;
+      meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, parametros } = req.body;
     const resultado = await consulta(
       `INSERT INTO indicadores (codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida,
        meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, creado_por, actualizado_por)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13) RETURNING *`,
       [codigo, nombre, descripcion, modulo, tipo, formula, unidad_medida,
-       meta || null, umbral_alerta || null, umbral_critico || null, frecuencia_medicion, responsable_id, req.usuario.id]
+        meta || null, umbral_alerta || null, umbral_critico || null, frecuencia_medicion, responsable_id, req.usuario.id]
     );
-    
+
     // Guardar parámetros si se proporcionan
     if (parametros && Array.isArray(parametros) && parametros.length > 0) {
       const indicadorId = resultado.rows[0].id;
@@ -131,7 +131,7 @@ const crear = async (req, res) => {
         );
       }
     }
-    
+
     res.status(201).json({ exito: true, datos: resultado.rows[0], mensaje: 'Indicador creado exitosamente' });
   } catch (error) {
     if (error.code === '23505') return res.status(409).json({ exito: false, mensaje: 'El código del indicador ya existe' });
@@ -142,16 +142,16 @@ const crear = async (req, res) => {
 const actualizar = async (req, res) => {
   try {
     const { nombre, descripcion, modulo, tipo, formula, unidad_medida,
-            meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, parametros } = req.body;
+      meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, parametros } = req.body;
     const resultado = await consulta(
       `UPDATE indicadores SET nombre=$1, descripcion=$2, modulo=$3, tipo=$4, formula=$5,
        unidad_medida=$6, meta=$7, umbral_alerta=$8, umbral_critico=$9, frecuencia_medicion=$10,
        responsable_id=$11, actualizado_por=$12 WHERE id=$13 RETURNING *`,
       [nombre, descripcion, modulo, tipo, formula, unidad_medida,
-       meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, req.usuario.id, req.params.id]
+        meta, umbral_alerta, umbral_critico, frecuencia_medicion, responsable_id, req.usuario.id, req.params.id]
     );
     if (!resultado.rows.length) return res.status(404).json({ exito: false, mensaje: 'Indicador no encontrado' });
-    
+
     // Actualizar parámetros si se proporcionan
     if (parametros && Array.isArray(parametros)) {
       const indicadorId = req.params.id;
@@ -166,7 +166,7 @@ const actualizar = async (req, res) => {
         );
       }
     }
-    
+
     res.json({ exito: true, datos: resultado.rows[0] });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
@@ -222,9 +222,9 @@ const registrarMedicion = async (req, res) => {
         `INSERT INTO alertas_indicador (indicador_id, medicion_id, tipo_alerta, mensaje, creado_por, actualizado_por)
          VALUES ($1,$2,$3,$4,$5,$5)`,
         [req.params.id, resultado.rows[0].id,
-         semaforo === 'rojo' ? 'critico' : 'bajo_umbral',
-         `Indicador '${ind.nombre}' en estado ${semaforo.toUpperCase()} (valor: ${valor}, meta: ${ind.meta})`,
-         req.usuario.id]
+        semaforo === 'rojo' ? 'critico' : 'bajo_umbral',
+        `Indicador '${ind.nombre}' en estado ${semaforo.toUpperCase()} (valor: ${valor}, meta: ${ind.meta})`,
+        req.usuario.id]
       );
     }
 
@@ -326,7 +326,7 @@ const generarPDF = async (req, res) => {
     let y = height - 105;
     const fila = (et, val) => {
       pagina.drawText(et + ':', { x: 20, y, size: 9, font: fB, color: AZUL });
-      pagina.drawText(String(val || '—'), { x: 150, y, size: 9, font: fN, color: rgb(0,0,0) });
+      pagina.drawText(String(val || '—'), { x: 150, y, size: 9, font: fN, color: rgb(0, 0, 0) });
       y -= 18;
     };
     fila('CÓDIGO', ind.codigo); fila('NOMBRE', ind.nombre);
@@ -350,17 +350,17 @@ const generarPDF = async (req, res) => {
     y -= 20;
 
     for (const m of mediciones.rows) {
-      const colorSem = m.estado_semaforo === 'verde' ? rgb(0.1,0.6,0.1) : m.estado_semaforo === 'rojo' ? rgb(0.8,0.1,0.1) : rgb(0.8,0.6,0);
-      pagina.drawText(m.periodo, { x: 28, y, size: 8, font: fN, color: rgb(0,0,0) });
-      pagina.drawText(String(m.valor), { x: 160, y, size: 8, font: fN, color: rgb(0,0,0) });
-      pagina.drawText(String(m.meta_periodo || ind.meta), { x: 240, y, size: 8, font: fN, color: rgb(0,0,0) });
+      const colorSem = m.estado_semaforo === 'verde' ? rgb(0.1, 0.6, 0.1) : m.estado_semaforo === 'rojo' ? rgb(0.8, 0.1, 0.1) : rgb(0.8, 0.6, 0);
+      pagina.drawText(m.periodo, { x: 28, y, size: 8, font: fN, color: rgb(0, 0, 0) });
+      pagina.drawText(String(m.valor), { x: 160, y, size: 8, font: fN, color: rgb(0, 0, 0) });
+      pagina.drawText(String(m.meta_periodo || ind.meta), { x: 240, y, size: 8, font: fN, color: rgb(0, 0, 0) });
       pagina.drawText(m.estado_semaforo?.toUpperCase(), { x: 310, y, size: 8, font: fB, color: colorSem });
       y -= 14;
       if (y < 60) break;
     }
 
     pagina.drawLine({ start: { x: 20, y: 50 }, end: { x: width - 20, y: 50 }, thickness: 1, color: AZUL });
-    pagina.drawText(`Generado: ${new Date().toLocaleString('es-PE')}`, { x: 20, y: 35, size: 8, font: fN, color: rgb(0.5,0.5,0.5) });
+    pagina.drawText(`Generado: ${new Date().toLocaleString('es-PE')}`, { x: 20, y: 35, size: 8, font: fN, color: rgb(0.5, 0.5, 0.5) });
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader('Content-Type', 'application/pdf');
@@ -412,11 +412,11 @@ const generarReporte = async (req, res) => {
     let y = 720;
     pagina.drawText(`Total: ${resultado.rows.length} indicadores`, { x: 20, y, size: 11, font: fB, color: AZUL });
     y -= 15;
-    
+
     const filtros = [];
     if (modulo) filtros.push(`Módulo: ${modulo}`);
     if (activo !== undefined) filtros.push(`Estado: ${activo === 'true' ? 'Activos' : 'Inactivos'}`);
-    
+
     if (filtros.length > 0) {
       pagina.drawText(`Filtros aplicados: ${filtros.join(' | ')}`, { x: 20, y, size: 9, font: fN, color: rgb(0.5, 0.5, 0.5) });
       y -= 20;
@@ -431,11 +431,11 @@ const generarReporte = async (req, res) => {
         pagina = pdfDoc.addPage([595, 842]);
         y = 800;
       }
-      
+
       pagina.drawRectangle({ x: 20, y: y - 5, width: width - 40, height: 15, color: AZUL });
       pagina.drawText(`${ind.codigo} - ${ind.nombre}`, { x: 25, y: y + 2, size: 9, font: fB, color: BLANCO });
       y -= 20;
-      
+
       pagina.drawText(`Módulo: ${ind.modulo} | Responsable: ${ind.responsable_nombre || 'N/A'}`, { x: 25, y, size: 8, font: fN, color: NEGRO });
       y -= 12;
       pagina.drawText(`Fórmula: ${ind.formula}`, { x: 25, y, size: 8, font: fN, color: rgb(0.4, 0.4, 0.4) });
@@ -452,13 +452,12 @@ const generarReporte = async (req, res) => {
     res.status(500).json({ exito: false, mensaje: error.message });
   }
 };
-
 const generarReporteDashboard = async (req, res) => {
   try {
     console.log('Iniciando generación de reporte del dashboard...');
-    
+
     // Obtener datos de todo el dashboard
-    const [docs, proc, audits, acciones, riesgos, indicadores, encuestas, usuarios] = await Promise.all([
+    const [docs, proc, audits, acciones, riesgos, indicadores, encuestas, usuarios, riesgoNivel, docsEstado] = await Promise.all([
       consulta('SELECT COUNT(*) AS total FROM documentos'),
       consulta('SELECT COUNT(*) AS total FROM procesos WHERE activo=true'),
       consulta('SELECT COUNT(*) AS total FROM auditorias'),
@@ -467,6 +466,8 @@ const generarReporteDashboard = async (req, res) => {
       consulta('SELECT COUNT(*) FILTER (WHERE activo=true) AS total_activos, COUNT(*) FILTER (WHERE NOT activo) AS total_inactivos FROM indicadores'),
       consulta('SELECT COUNT(*) AS total FROM encuestas'),
       consulta('SELECT COUNT(*) AS total FROM usuarios'),
+      consulta('SELECT clasificacion_nivel, COUNT(*) AS cantidad FROM riesgos GROUP BY clasificacion_nivel'),
+      consulta('SELECT estado, COUNT(*) AS cantidad FROM documentos GROUP BY estado')
     ]);
 
     const [indicadoresPorModulo, indicadoresPorSemaforo] = await Promise.all([
@@ -495,216 +496,339 @@ const generarReporteDashboard = async (req, res) => {
       console.log('No se pudo cargar el logo:', error.message);
     }
 
-    // PÁGINA 1: ENCABEZADO + KPIS + GRÁFICOS
-    let pagina = pdfDoc.addPage([595, 842]);
-    const width = 595;
-    const height = 842;
-    const AZUL = rgb(0.02, 0.35, 0.65);
+    // Constantes de diseño
+    const PAGE_W = 595;
+    const PAGE_H = 842;
+    const MARGEN = 40;
+    const CONTENT_W = PAGE_W - MARGEN * 2;
+    const AZUL = rgb(0, 0.24, 0.65);
+    const AZUL_CLARO = rgb(0.93, 0.95, 1);
     const BLANCO = rgb(1, 1, 1);
-    const NEGRO = rgb(0, 0, 0);
-    const VERDE = rgb(0.06, 0.73, 0.51);
-    const AMARILLO = rgb(0.96, 0.62, 0.04);
-    const ROJO = rgb(0.94, 0.27, 0.27);
-    const GRIS_CLARO = rgb(0.95, 0.95, 0.95);
+    const NEGRO = rgb(0.13, 0.13, 0.13);
+    const GRIS = rgb(0.5, 0.5, 0.5);
+    const GRIS_CLARO = rgb(0.96, 0.96, 0.97);
+    const VERDE = rgb(0, 0.65, 0.32);
+    const AMARILLO = rgb(1, 0.55, 0);
+    const ROJO = rgb(0.86, 0.08, 0.24);
+    const FOOTER_Y = 30;
 
-    let y = 800;
-
-    // Encabezado con fondo azul
-    pagina.drawRectangle({ x: 0, y: height - 60, width, height: 60, color: AZUL });
-    
-    // Dibujar logo si existe
-    if (logoImage) {
-      const logoDims = logoImage.scale(0.05);
-      pagina.drawImage(logoImage, {
-        x: 420,
-        y: height - 60,
-        width: logoDims.width,
-        height: logoDims.height,
-      });
-      pagina.drawText('SGC-UNT', { x: 80, y: height - 35, size: 20, font: fB, color: BLANCO });
-      pagina.drawText('Reporte Ejecutivo del Dashboard', { x: 80, y: height - 15, size: 12, font: fN, color: rgb(0.8, 0.9, 1) });
-    } else {
-      pagina.drawText('SGC-UNT', { x: 20, y: height - 35, size: 20, font: fB, color: BLANCO });
-      pagina.drawText('Reporte Ejecutivo del Dashboard', { x: 20, y: height - 15, size: 12, font: fN, color: rgb(0.8, 0.9, 1) });
-    }
-
-    const fechaReporte = new Date().toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    pagina.drawText(fechaReporte, { x: width - 80, y: height - 25, size: 10, font: fN, color: BLANCO });
-
-    y -= 80;
+    const fechaReporte = new Date().toLocaleDateString('es-PE', {
+      weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+    });
 
     const stats = {
-      docs: docs.rows[0]?.total || 0,
-      proc: proc.rows[0]?.total || 0,
-      audits: audits.rows[0]?.total || 0,
-      acciones: acciones.rows[0]?.total || 0,
-      riesgos: riesgos.rows[0]?.total || 0,
-      indicadores: indicadores.rows[0]?.total_activos || 0,
-      encuestas: encuestas.rows[0]?.total || 0,
-      usuarios: usuarios.rows[0]?.total || 0,
+      docs: parseInt(docs.rows[0]?.total) || 0,
+      proc: parseInt(proc.rows[0]?.total) || 0,
+      audits: parseInt(audits.rows[0]?.total) || 0,
+      acciones: parseInt(acciones.rows[0]?.total) || 0,
+      riesgos: parseInt(riesgos.rows[0]?.total) || 0,
+      indicadores: parseInt(indicadores.rows[0]?.total_activos) || 0,
+      encuestas: parseInt(encuestas.rows[0]?.total) || 0,
+      usuarios: parseInt(usuarios.rows[0]?.total) || 0,
     };
 
-    // Resumen ejecutivo corto
-    pagina.drawText('RESUMEN EJECUTIVO', { x: 20, y, size: 12, font: fB, color: AZUL });
-    y -= 20;
-    const resumen = `El SGC presenta ${stats.indicadores} indicadores activos como logro principal. Desafío: ${stats.docs} documentos y ${stats.riesgos} riesgos.`;
-    pagina.drawText(resumen, { x: 20, y, size: 9, font: fN, color: NEGRO });
-    y -= 30;
+    // ── Helpers ──────────────────────────────────────────────
+    const drawFooter = (pg) => {
+      pg.drawLine({ start: { x: MARGEN, y: FOOTER_Y + 10 }, end: { x: PAGE_W - MARGEN, y: FOOTER_Y + 10 }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
+      pg.drawText(`Generado por SGC-UNT — ${fechaReporte}`, { x: MARGEN, y: FOOTER_Y, size: 7, font: fN, color: GRIS });
+      pg.drawText('Universidad Nacional de Trujillo', { x: PAGE_W - MARGEN - fN.widthOfTextAtSize('Universidad Nacional de Trujillo', 7), y: FOOTER_Y, size: 7, font: fN, color: GRIS });
+    };
 
-    // KPIS en grid 2x3 con colores
-    const kpis = [
-      { label: 'Documentos', valor: stats.docs, color: stats.docs === 0 ? ROJO : VERDE },
-      { label: 'Riesgos', valor: stats.riesgos, color: stats.riesgos === 0 ? ROJO : VERDE },
-      { label: 'Procesos', valor: stats.proc, color: stats.proc >= 2 ? VERDE : AMARILLO },
-      { label: 'Indicadores', valor: stats.indicadores, color: stats.indicadores >= 10 ? VERDE : AMARILLO },
-      { label: 'Auditorías', valor: stats.audits, color: stats.audits === 0 ? AMARILLO : VERDE },
-      { label: 'CAPAs', valor: stats.acciones, color: stats.acciones > 5 ? AMARILLO : VERDE },
-    ];
+    const nuevaPagina = () => {
+      const pg = pdfDoc.addPage([PAGE_W, PAGE_H]);
+      drawFooter(pg);
+      return pg;
+    };
 
-    kpis.forEach((kpi, i) => {
-      const row = Math.floor(i / 3);
-      const col = i % 3;
-      const x = 20 + col * 190;
-      const yPos = y - (row * 70);
-      
-      // Tarjeta con borde de color
-      pagina.drawRectangle({ x, y: yPos - 50, width: 180, height: 50, color: GRIS_CLARO });
-      pagina.drawRectangle({ x, y: yPos - 50, width: 180, height: 3, color: kpi.color });
-      pagina.drawText(kpi.label, { x: x + 10, y: yPos - 15, size: 9, font: fN, color: NEGRO });
-      pagina.drawText(kpi.valor.toString(), { x: x + 10, y: yPos - 35, size: 20, font: fB, color: kpi.color });
-    });
+    const drawSectionTitle = (pg, titulo, yPos) => {
+      pg.drawRectangle({ x: MARGEN, y: yPos - 4, width: CONTENT_W, height: 22, color: AZUL });
+      pg.drawText(titulo, { x: MARGEN + 10, y: yPos + 2, size: 10, font: fB, color: BLANCO });
+      return yPos - 30;
+    };
 
-    y -= 160;
+    const drawKpiCard = (pg, x, yPos, label, valor, subtexto, accentColor) => {
+      const cardW = (CONTENT_W - 20) / 3;
+      const cardH = 60;
+      // Fondo
+      pg.drawRectangle({ x, y: yPos - cardH, width: cardW, height: cardH, color: GRIS_CLARO, borderColor: rgb(0.88, 0.88, 0.88), borderWidth: 0.5 });
+      // Acento superior
+      pg.drawRectangle({ x, y: yPos - 3, width: cardW, height: 3, color: accentColor });
+      // Valor
+      pg.drawText(valor.toString(), { x: x + 12, y: yPos - 30, size: 22, font: fB, color: accentColor });
+      // Label
+      pg.drawText(label, { x: x + 12, y: yPos - 16, size: 9, font: fN, color: NEGRO });
+      // Subtexto
+      pg.drawText(subtexto, { x: x + 12, y: yPos - 46, size: 7, font: fN, color: GRIS });
+    };
 
-    // Gráfico de barras invertidas para indicadores por módulo
-    if (indicadoresPorModulo.rows.length > 0) {
-      pagina.drawText('INDICADORES POR MÓDULO', { x: 20, y, size: 11, font: fB, color: AZUL });
-      y -= 145;
-
-      const maxVal = Math.max(...indicadoresPorModulo.rows.map(r => r.total), 12);
-      const barWidth = 50;
-      const barSpacing = 40;
-      const startX = 100;
-      const chartHeight = 100;
-      const topY = y;
-      const bottomY = topY + chartHeight;
-
-      // Dibujar eje Y invertido (0 arriba, max abajo)
-      for (let i = 0; i <= maxVal; i += 2) {
-        const yPos = topY + (i / maxVal) * chartHeight;
-        pagina.drawText(i.toString(), { x: 30, y: yPos, size: 8, font: fN, color: NEGRO });
-        // Línea horizontal de guía
-        pagina.drawLine({ start: { x: 50, y: yPos }, end: { x: width - 50, y: yPos }, thickness: 0.5, color: rgb(0.9, 0.9, 0.9) });
+    const drawHorizontalBar = (pg, x, yPos, label, valor, maxVal, barColor, total) => {
+      const maxBarW = CONTENT_W - 160;
+      const barW = maxVal > 0 ? (valor / maxVal) * maxBarW : 0;
+      const barH = 16;
+      const pct = total > 0 ? Math.round((valor / total) * 100) : 0;
+      // Label
+      pg.drawText(label, { x: x, y: yPos + 3, size: 9, font: fN, color: NEGRO });
+      // Bar background
+      pg.drawRectangle({ x: x + 110, y: yPos - 2, width: maxBarW, height: barH, color: rgb(0.92, 0.92, 0.92) });
+      // Bar fill
+      if (barW > 0) {
+        pg.drawRectangle({ x: x + 110, y: yPos - 2, width: barW, height: barH, color: barColor });
       }
+      // Value + percentage
+      pg.drawText(`${valor} (${pct}%)`, { x: x + 115 + maxBarW + 5, y: yPos + 3, size: 8, font: fB, color: NEGRO });
+      return yPos - 28;
+    };
 
-      // Dibujar eje X inferior
-      pagina.drawLine({
-        start: { x: 50, y: bottomY },
-        end: { x: width - 50, y: bottomY },
-        thickness: 1,
-        color: NEGRO
-      });
+    // ══════════════════════════════════════════════════════════
+    // PÁGINA 1
+    // ══════════════════════════════════════════════════════════
+    let pagina = nuevaPagina();
+    let y;
 
-      // Dibujar barras invertidas (crecen hacia abajo desde arriba)
-      indicadoresPorModulo.rows.forEach((mod, i) => {
-        const x = startX + i * (barWidth + barSpacing);
-        const barHeight = (mod.total / maxVal) * chartHeight;
-        
-        // Color según módulo
-        const barColor = mod.modulo === 'general' ? AZUL : mod.modulo === 'satisfaccion' ? rgb(1, 0.5, 0) : AZUL;
-        
-        // Barra invertida (comienza en topY y crece hacia abajo)
-        pagina.drawRectangle({ x, y: topY, width: barWidth, height: barHeight, color: barColor });
-        
-        // Valor encima de la barra
-        pagina.drawText(mod.total.toString(), { x: x + 15, y: topY - 10, size: 9, font: fB, color: NEGRO });
-        
-        // Etiqueta en eje X (abajo) - CORREGIDO
-        const label = mod.modulo === 'general' ? 'General' : mod.modulo === 'satisfaccion' ? 'Satisfacción' : mod.modulo.substring(0, 10);
-        pagina.drawText(label, { x: x + 5, y: bottomY + 15, size: 8, font: fN, color: NEGRO });
-      });
+    // ── Encabezado ──────────────────────────────────────────
+    pagina.drawRectangle({ x: 0, y: PAGE_H - 80, width: PAGE_W, height: 80, color: AZUL });
 
-      // Nota debajo del gráfico - CORREGIDO
-const totalIndicadores = indicadoresPorModulo.rows.reduce((sum, r) => {
-  const val = Number(r.total);
-  return sum + (isNaN(val) ? 0 : val);
-}, 0);      pagina.drawText(`Total de indicadores activos: ${totalIndicadores}`, { x: 20, y: bottomY + 30, size: 8, font: fN, color: rgb(0.5, 0.5, 0.5) });
-
-      y -= chartHeight + 50;
+    if (logoImage) {
+      const logoDims = logoImage.scale(0.06);
+      pagina.drawImage(logoImage, { x: MARGEN, y: PAGE_H - 70, width: logoDims.width, height: logoDims.height });
+      pagina.drawText('SGC-UNT', { x: MARGEN + logoDims.width + 12, y: PAGE_H - 35, size: 22, font: fB, color: BLANCO });
+      pagina.drawText('Reporte Ejecutivo del Dashboard', { x: MARGEN + logoDims.width + 12, y: PAGE_H - 55, size: 11, font: fN, color: rgb(0.8, 0.88, 1) });
+    } else {
+      pagina.drawText('SGC-UNT', { x: MARGEN, y: PAGE_H - 35, size: 22, font: fB, color: BLANCO });
+      pagina.drawText('Reporte Ejecutivo del Dashboard', { x: MARGEN, y: PAGE_H - 55, size: 11, font: fN, color: rgb(0.8, 0.88, 1) });
     }
 
-    // PÁGINA 2: GRÁFICOS + RECOMENDACIONES
-    pagina = pdfDoc.addPage([595, 842]);
-    y = 800;
+    // Fecha en esquina derecha del header
+    const fechaCorta = new Date().toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    pagina.drawText(fechaCorta, { x: PAGE_W - MARGEN - fN.widthOfTextAtSize(fechaCorta, 10), y: PAGE_H - 30, size: 10, font: fN, color: BLANCO });
+    pagina.drawText('Sistema de Gestión de Calidad', { x: PAGE_W - MARGEN - fN.widthOfTextAtSize('Sistema de Gestión de Calidad', 8), y: PAGE_H - 50, size: 8, font: fN, color: rgb(0.8, 0.88, 1) });
 
-    // Encabezado página 2
-    pagina.drawRectangle({ x: 0, y: height - 40, width, height: 40, color: AZUL });
-    pagina.drawText('ANÁLISIS DETALLADO', { x: 20, y: height - 25, size: 14, font: fB, color: BLANCO });
+    y = PAGE_H - 100;
 
-    y -= 70;
+    // ── Resumen Ejecutivo ────────────────────────────────────
+    y = drawSectionTitle(pagina, 'RESUMEN EJECUTIVO', y);
 
-    // Gráfico de semáforo circular
-    if (indicadoresPorSemaforo.rows.length > 0) {
-      pagina.drawText('ESTADO DE INDICADORES (SEMÁFORO)', { x: 20, y, size: 11, font: fB, color: AZUL });
-      y -= 30;
-
-      const total = indicadoresPorSemaforo.rows.reduce((sum, r) => sum + r.total, 0);
-      let startAngle = 0;
-      const centerX = 150;
-      const centerY = y - 50;
-      const radius = 40;
-
-      indicadoresPorSemaforo.rows.forEach(s => {
-        const color = s.estado_semaforo === 'verde' ? VERDE : s.estado_semaforo === 'amarillo' ? AMARILLO : ROJO;
-        const percentage = s.total / total;
-        const endAngle = startAngle + (percentage * 2 * Math.PI);
-        
-        // Dibujar sector circular
-        pagina.drawCircle({ x: centerX, y: centerY, size: radius, color: color });
-        
-        // Etiqueta
-        pagina.drawText(`${s.estado_semaforo}: ${s.total}`, { x: 220, y: y - 30 + indicadoresPorSemaforo.rows.indexOf(s) * 15, size: 9, font: fN, color: NEGRO });
-        
-        startAngle = endAngle;
-      });
-
-      y -= 120;
-    }
-
-    // Recuadro de alertas
-    pagina.drawRectangle({ x: 20, y: y - 60, width: width - 40, height: 60, color: rgb(1, 0.95, 0.95) });
-    pagina.drawRectangle({ x: 20, y: y - 60, width: width - 40, height: 3, color: ROJO });
-    pagina.drawText('ALERTA: ÁREAS CRÍTICAS', { x: 30, y: y - 15, size: 11, font: fB, color: ROJO });
-    
-    const alertas = [];
-    if (stats.docs === 0) alertas.push('• Sin documentos registrados');
-    if (stats.riesgos === 0) alertas.push('• Sin riesgos identificados');
-    if (stats.audits === 0) alertas.push('• Sin auditorías programadas');
-    
-    alertas.forEach((alerta, i) => {
-      pagina.drawText(alerta, { x: 30, y: y - 30 - (i * 12), size: 9, font: fN, color: NEGRO });
+    const descripcionResumen = [
+      `El Sistema de Gestión de Calidad de la Universidad Nacional de Trujillo presenta el siguiente`,
+      `estado al ${fechaReporte}. Este reporte consolida los datos de todos los módulos del sistema.`
+    ];
+    descripcionResumen.forEach(linea => {
+      pagina.drawText(linea, { x: MARGEN, y, size: 9, font: fN, color: NEGRO });
+      y -= 14;
     });
+    y -= 6;
 
+    // Destacados
+    const totalGeneral = stats.docs + stats.proc + stats.audits + stats.acciones + stats.riesgos;
+    pagina.drawRectangle({ x: MARGEN, y: y - 40, width: CONTENT_W, height: 40, color: AZUL_CLARO, borderColor: AZUL, borderWidth: 0.5 });
+    pagina.drawText('Resumen:', { x: MARGEN + 10, y: y - 14, size: 9, font: fB, color: AZUL });
+    pagina.drawText(
+      `${stats.indicadores} indicadores activos - ${stats.docs} documentos - ${stats.proc} procesos - ${stats.riesgos} riesgos - ${stats.acciones} no conformidades - ${stats.usuarios} usuarios`,
+      { x: MARGEN + 10, y: y - 30, size: 8, font: fN, color: NEGRO }
+    );
+    y -= 55;
+
+    // ── KPIs Principales ─────────────────────────────────────
+    y = drawSectionTitle(pagina, 'INDICADORES CLAVE DE RENDIMIENTO (KPIs)', y);
+
+    const cardW = (CONTENT_W - 20) / 3;
+
+    // Fila 1
+    drawKpiCard(pagina, MARGEN, y, 'Documentos', stats.docs, stats.docs === 0 ? 'Sin documentos registrados' : 'Total registrados', stats.docs > 0 ? AZUL : GRIS);
+    drawKpiCard(pagina, MARGEN + cardW + 10, y, 'Procesos activos', stats.proc, stats.proc === 0 ? 'Sin procesos activos' : 'En el mapa de procesos', stats.proc > 0 ? VERDE : GRIS);
+    drawKpiCard(pagina, MARGEN + (cardW + 10) * 2, y, 'Auditorías', stats.audits, stats.audits === 0 ? 'Sin auditorías programadas' : 'Total en el sistema', stats.audits > 0 ? rgb(0.42, 0.27, 0.67) : GRIS);
+    y -= 75;
+
+    // Fila 2
+    drawKpiCard(pagina, MARGEN, y, 'No conformidades', stats.acciones, stats.acciones === 0 ? 'Sin no conformidades' : 'Registradas', stats.acciones > 0 ? AMARILLO : GRIS);
+    drawKpiCard(pagina, MARGEN + cardW + 10, y, 'Riesgos', stats.riesgos, stats.riesgos === 0 ? 'Sin riesgos identificados' : 'Registrados', stats.riesgos > 0 ? rgb(1, 0.55, 0) : GRIS);
+    drawKpiCard(pagina, MARGEN + (cardW + 10) * 2, y, 'Indicadores', stats.indicadores, stats.indicadores === 0 ? 'Sin indicadores activos' : 'Activos monitoreados', stats.indicadores > 0 ? VERDE : GRIS);
     y -= 80;
 
-    // Recomendaciones
-    pagina.drawText('RECOMENDACIONES', { x: 20, y, size: 11, font: fB, color: AZUL });
-    y -= 20;
+    // ── Documentos por Estado ─────────────────────────────────
+    y = drawSectionTitle(pagina, 'DOCUMENTOS POR ESTADO', y);
+
+    if (docsEstado && docsEstado.rows.length > 0) {
+      const totalDocs = docsEstado.rows.reduce((sum, r) => sum + parseInt(r.cantidad), 0);
+      const maxValDoc = Math.max(...docsEstado.rows.map(r => parseInt(r.cantidad)));
+      const coloresEstado = {
+        borrador: rgb(0.23, 0.51, 0.96),
+        revision: rgb(0.96, 0.62, 0.04),
+        aprobado: rgb(0.55, 0.36, 0.96),
+        vigente: VERDE,
+        obsoleto: GRIS
+      };
+
+      pagina.drawText(`Total de documentos: ${totalDocs}`, { x: MARGEN, y, size: 8, font: fN, color: GRIS });
+      y -= 18;
+
+      docsEstado.rows.forEach(d => {
+        const label = d.estado.charAt(0).toUpperCase() + d.estado.slice(1).replace(/_/g, ' ');
+        const color = coloresEstado[d.estado] || AZUL;
+        y = drawHorizontalBar(pagina, MARGEN, y, label, parseInt(d.cantidad), maxValDoc, color, totalDocs);
+      });
+    } else {
+      pagina.drawText('No hay documentos registrados en el sistema.', { x: MARGEN, y, size: 9, font: fN, color: GRIS });
+      y -= 20;
+    }
+    y -= 10;
+
+    // ── Riesgos por Nivel ─────────────────────────────────────
+    y = drawSectionTitle(pagina, 'RIESGOS POR NIVEL', y);
+
+    if (riesgoNivel && riesgoNivel.rows.length > 0) {
+      const totalRiesgos = riesgoNivel.rows.reduce((sum, r) => sum + parseInt(r.cantidad), 0);
+      const maxValRiesgo = Math.max(...riesgoNivel.rows.map(r => parseInt(r.cantidad)));
+      const coloresNivel = {
+        bajo: VERDE,
+        moderado: AMARILLO,
+        alto: rgb(1, 0.55, 0),
+        critico: ROJO
+      };
+
+      pagina.drawText(`Total de riesgos: ${totalRiesgos}`, { x: MARGEN, y, size: 8, font: fN, color: GRIS });
+      y -= 18;
+
+      riesgoNivel.rows.forEach(r => {
+        const label = r.clasificacion_nivel.charAt(0).toUpperCase() + r.clasificacion_nivel.slice(1);
+        const color = coloresNivel[r.clasificacion_nivel] || AZUL;
+        y = drawHorizontalBar(pagina, MARGEN, y, label, parseInt(r.cantidad), maxValRiesgo, color, totalRiesgos);
+      });
+    } else {
+      pagina.drawText('No hay riesgos identificados en el sistema.', { x: MARGEN, y, size: 9, font: fN, color: GRIS });
+      y -= 20;
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // PÁGINA 2
+    // ══════════════════════════════════════════════════════════
+    pagina = nuevaPagina();
+    y = PAGE_H - 50;
+
+    // ── Indicadores por Módulo ────────────────────────────────
+    y = drawSectionTitle(pagina, 'INDICADORES POR MÓDULO', y);
+
+    if (indicadoresPorModulo.rows.length > 0) {
+      const totalInd = indicadoresPorModulo.rows.reduce((sum, r) => sum + parseInt(r.total), 0);
+      const maxValInd = Math.max(...indicadoresPorModulo.rows.map(r => parseInt(r.total)));
+
+      pagina.drawText(`Total de indicadores activos: ${totalInd}`, { x: MARGEN, y, size: 8, font: fN, color: GRIS });
+      y -= 18;
+
+      indicadoresPorModulo.rows.forEach(mod => {
+        const label = mod.modulo === 'general' ? 'General' : 
+                      mod.modulo === 'satisfaccion' ? 'Satisfacción' :
+                      mod.modulo.charAt(0).toUpperCase() + mod.modulo.slice(1);
+        y = drawHorizontalBar(pagina, MARGEN, y, label, parseInt(mod.total), maxValInd, AZUL, totalInd);
+      });
+    } else {
+      pagina.drawText('No hay indicadores activos en el sistema.', { x: MARGEN, y, size: 9, font: fN, color: GRIS });
+      y -= 20;
+    }
+    y -= 15;
+
+    // ── Estado de Indicadores (Semáforo) ──────────────────────
+    y = drawSectionTitle(pagina, 'ESTADO DE INDICADORES (SEMÁFORO)', y);
+
+    if (indicadoresPorSemaforo.rows.length > 0) {
+      const totalSem = indicadoresPorSemaforo.rows.reduce((sum, r) => sum + parseInt(r.total), 0);
+      const coloresSemaforo = {
+        verde: VERDE,
+        amarillo: AMARILLO,
+        rojo: ROJO
+      };
+      const labelsSemaforo = {
+        verde: 'En meta (verde)',
+        amarillo: 'En alerta (amarillo)',
+        rojo: 'Critico (rojo)'
+      };
+
+      pagina.drawText(`Total de indicadores con medicion: ${totalSem}`, { x: MARGEN, y, size: 8, font: fN, color: GRIS });
+      y -= 18;
+
+      indicadoresPorSemaforo.rows.forEach(s => {
+        const label = labelsSemaforo[s.estado_semaforo] || s.estado_semaforo;
+        const color = coloresSemaforo[s.estado_semaforo] || AZUL;
+        y = drawHorizontalBar(pagina, MARGEN, y, label, parseInt(s.total), totalSem, color, totalSem);
+      });
+    } else {
+      pagina.drawText('No hay mediciones registradas para los indicadores.', { x: MARGEN, y, size: 9, font: fN, color: GRIS });
+      y -= 20;
+    }
+    y -= 15;
+
+    // ── Análisis Detallado ────────────────────────────────────
+    y = drawSectionTitle(pagina, 'ANALISIS DETALLADO', y);
+
+    // Fortalezas
+    pagina.drawText('Fortalezas:', { x: MARGEN, y, size: 9, font: fB, color: VERDE });
+    y -= 16;
+    const fortalezas = [];
+    if (stats.indicadores >= 10) fortalezas.push(`Sistema robusto de ${stats.indicadores} indicadores activos para monitoreo continuo.`);
+    if (stats.proc > 0) fortalezas.push(`${stats.proc} procesos activos mapeados e identificados.`);
+    if (stats.docs > 0) fortalezas.push(`${stats.docs} documentos registrados en el sistema documental.`);
+    if (stats.usuarios > 1) fortalezas.push(`${stats.usuarios} usuarios activos participando en el SGC.`);
+    if (fortalezas.length === 0) fortalezas.push('El sistema esta en etapa inicial de implementacion.');
+
+    fortalezas.forEach(f => {
+      pagina.drawText(`  - ${f}`, { x: MARGEN, y, size: 8, font: fN, color: NEGRO });
+      y -= 14;
+    });
+    y -= 8;
+
+    // Áreas de mejora
+    pagina.drawText('Areas de mejora:', { x: MARGEN, y, size: 9, font: fB, color: AMARILLO });
+    y -= 16;
+    const mejoras = [];
+    if (stats.audits === 0) mejoras.push('No hay auditorias programadas. Se recomienda planificar la primera auditoria interna.');
+    if (stats.docs < 5) mejoras.push('Pocos documentos registrados. Incorporar politicas, manuales y procedimientos pendientes.');
+    if (stats.acciones > 0) mejoras.push(`${stats.acciones} no conformidades requieren seguimiento y cierre oportuno.`);
+    const riesgosAltos = riesgoNivel.rows.filter(r => r.clasificacion_nivel === 'alto' || r.clasificacion_nivel === 'critico');
+    if (riesgosAltos.length > 0) {
+      const cantAltos = riesgosAltos.reduce((s, r) => s + parseInt(r.cantidad), 0);
+      mejoras.push(`${cantAltos} riesgos en nivel alto/critico requieren planes de mitigacion urgentes.`);
+    }
+    if (mejoras.length === 0) mejoras.push('No se identificaron areas criticas de mejora.');
+
+    mejoras.forEach(m => {
+      pagina.drawText(`  - ${m}`, { x: MARGEN, y, size: 8, font: fN, color: NEGRO });
+      y -= 14;
+    });
+    y -= 15;
+
+    // ── Alertas Críticas ──────────────────────────────────────
+    const alertas = [];
+    if (stats.docs === 0) alertas.push('Sin documentos registrados en el sistema.');
+    if (stats.audits === 0) alertas.push('Sin auditorias programadas para el periodo actual.');
+    if (stats.acciones > 3) alertas.push(`${stats.acciones} no conformidades requieren atencion inmediata.`);
+    if (riesgosAltos.length > 0) alertas.push('Existen riesgos en nivel alto/critico sin mitigar.');
+
+    if (alertas.length > 0) {
+      // Calcular alto del recuadro
+      const alertaH = 30 + alertas.length * 14;
+      pagina.drawRectangle({ x: MARGEN, y: y - alertaH, width: CONTENT_W, height: alertaH, color: rgb(1, 0.95, 0.95), borderColor: ROJO, borderWidth: 0.5 });
+      pagina.drawText('ALERTAS CRITICAS', { x: MARGEN + 10, y: y - 16, size: 10, font: fB, color: ROJO });
+      alertas.forEach((a, i) => {
+        pagina.drawText(`- ${a}`, { x: MARGEN + 10, y: y - 32 - (i * 14), size: 8, font: fN, color: NEGRO });
+      });
+      y -= alertaH + 15;
+    }
+
+    // ── Recomendaciones ───────────────────────────────────────
+    y = drawSectionTitle(pagina, 'RECOMENDACIONES', y);
 
     const recomendaciones = [];
-    if (stats.docs === 0) recomendaciones.push('1. Crear primer documento del sistema');
-    if (stats.riesgos === 0) recomendaciones.push('2. Registrar primer riesgo institucional');
-    if (stats.indicadores < 10) recomendaciones.push('3. Expandir sistema de indicadores');
-    if (recomendaciones.length === 0) recomendaciones.push('1. Continuar monitoreo periódico del sistema');
+    if (stats.audits === 0) recomendaciones.push('Programar la primera auditoria interna del sistema de gestion de calidad.');
+    if (stats.docs < 5) recomendaciones.push('Completar el acervo documental con politicas, manuales y procedimientos faltantes.');
+    if (stats.indicadores < 12) recomendaciones.push('Expandir el sistema de indicadores para cubrir todos los objetivos estrategicos (OEI.01 a OC.01).');
+    if (stats.acciones > 0) recomendaciones.push('Implementar seguimiento semanal a las no conformidades abiertas para asegurar cierre oportuno.');
+    if (riesgosAltos.length > 0) recomendaciones.push('Priorizar planes de tratamiento para riesgos en nivel alto y critico.');
+    recomendaciones.push('Mantener el monitoreo periodico de todos los modulos del SGC.');
 
     recomendaciones.forEach((rec, i) => {
-      pagina.drawText(rec, { x: 20, y: y - (i * 15), size: 9, font: fN, color: NEGRO });
+      pagina.drawText(`${i + 1}. ${rec}`, { x: MARGEN, y, size: 8, font: fN, color: NEGRO });
+      y -= 16;
     });
-
-    // Pie de página
-    y = 30;
-    pagina.drawLine({ start: { x: 20, y }, end: { x: width - 20, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
-    pagina.drawText(`Generado por SGC-UNT - ${fechaReporte}`, { x: 20, y: y - 10, size: 7, font: fN, color: rgb(0.5, 0.5, 0.5) });
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader('Content-Type', 'application/pdf');
@@ -716,5 +840,7 @@ const totalIndicadores = indicadoresPorModulo.rows.reduce((sum, r) => {
   }
 };
 
-module.exports = { listar, dashboard, obtener, crear, actualizar, toggleActivo, eliminar,
-                   registrarMedicion, actualizarMedicion, listarMediciones, eliminarMedicion, listarParametros, listarAlertas, generarPDF, generarReporte, generarReporteDashboard };
+module.exports = {
+  listar, dashboard, obtener, crear, actualizar, toggleActivo, eliminar,
+  registrarMedicion, actualizarMedicion, listarMediciones, eliminarMedicion, listarParametros, listarAlertas, generarPDF, generarReporte, generarReporteDashboard
+};

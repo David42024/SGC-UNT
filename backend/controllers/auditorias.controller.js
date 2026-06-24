@@ -364,12 +364,56 @@ const cambiarEstadoAuditoria = async (req, res) => {
 
 const estadisticas = async (req, res) => {
   try {
-    const [totales, porEstado, porClasif] = await Promise.all([
+    const [totales, porEstado, porClasif, proximas, acreditacion] = await Promise.all([
       consulta('SELECT COUNT(*) AS total FROM auditorias'),
       consulta('SELECT estado, COUNT(*) AS cantidad FROM auditorias GROUP BY estado'),
-      consulta('SELECT clasificacion, COUNT(*) AS cantidad FROM hallazgos_auditoria GROUP BY clasificacion')
+      consulta('SELECT clasificacion, COUNT(*) AS cantidad FROM hallazgos_auditoria GROUP BY clasificacion'),
+      // Próximas auditorías (planificadas o en_proceso, ordenadas por fecha más cercana)
+      consulta(`
+        SELECT a.titulo AS nombre,
+               u.nombres || ' ' || u.apellidos AS responsable,
+               a.fecha_planificada AS fecha,
+               a.estado
+        FROM auditorias a
+        LEFT JOIN usuarios u ON u.id = a.auditor_lider_id
+        WHERE a.estado IN ('planificado', 'en_proceso')
+        ORDER BY a.fecha_planificada ASC NULLS LAST
+        LIMIT 5
+      `),
+      // Datos de autoevaluación SINEACE más reciente
+      consulta(`
+        SELECT
+          ae.nombre,
+          ae.estado,
+          ae.fecha_fin AS proxima_evaluacion,
+          COUNT(ev.id) AS total_evidencias,
+          COUNT(ev.id) FILTER (WHERE ev.estado_cumplimiento = 'cumple') AS cumplidas,
+          COUNT(ev.id) FILTER (WHERE ev.estado_cumplimiento IN ('no_cumple', 'no_iniciado')) AS pendientes,
+          COUNT(ev.id) FILTER (WHERE ev.estado_cumplimiento = 'no_cumple') AS criticos,
+          CASE WHEN COUNT(ev.id) > 0
+               THEN ROUND(COUNT(ev.id) FILTER (WHERE ev.estado_cumplimiento = 'cumple') * 100.0 / COUNT(ev.id))
+               ELSE 0
+          END AS progreso
+        FROM autoevaluaciones ae
+        LEFT JOIN evidencias_acreditacion ev ON ev.autoevaluacion_id = ae.id
+        LEFT JOIN modelos_acreditacion ma ON ma.id = ae.modelo_id
+        WHERE ma.entidad = 'SINEACE'
+        GROUP BY ae.id, ae.nombre, ae.estado, ae.fecha_fin
+        ORDER BY ae.creado_en DESC
+        LIMIT 1
+      `)
     ]);
-    res.json({ exito: true, datos: { total: parseInt(totales.rows[0].total), por_estado: porEstado.rows, hallazgos_por_clasificacion: porClasif.rows } });
+
+    res.json({
+      exito: true,
+      datos: {
+        total: parseInt(totales.rows[0].total),
+        por_estado: porEstado.rows,
+        hallazgos_por_clasificacion: porClasif.rows,
+        proximas: proximas.rows,
+        acreditacion_sineace: acreditacion.rows[0] || null
+      }
+    });
   } catch (error) {
     res.status(500).json({ exito: false, mensaje: error.message });
   }

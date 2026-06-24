@@ -387,7 +387,7 @@ export function Semaforo({ estado, showLabel = true }) {
 
 // ── Widget de Acreditación ─────────────────────────────────────
 export function WidgetAcreditacion({ progreso, estandares_cumplidos, estandares_totales, proxima_evaluacion, alerta }) {
-  const porcentaje = Math.round((estandares_cumplidos / estandares_totales) * 100);
+  const porcentaje = estandares_totales > 0 ? Math.round((estandares_cumplidos / estandares_totales) * 100) : (progreso || 0);
   const colorProgreso = porcentaje >= 80 ? 'bg-green-500' : porcentaje >= 60 ? 'bg-yellow-500' : 'bg-red-500';
   
   return (

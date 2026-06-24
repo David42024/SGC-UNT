@@ -223,7 +223,7 @@ export default function DashboardPage() {
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie 
-                  data={riesgosNivel} 
+                  data={riesgosNivel.map(entry => ({ ...entry, cantidad: Number(entry.cantidad) }))} 
                   dataKey="cantidad" 
                   nameKey="clasificacion_nivel"
                   cx="50%" 
@@ -237,11 +237,10 @@ export default function DashboardPage() {
                 >
                   {riesgosNivel.map((entry, index) => {
                     const colores = {
-                      muy_bajo: '#10b981',
-                      bajo: '#34d399',
-                      medio: '#f59e0b',
+                      bajo: '#10b981',
+                      moderado: '#f59e0b',
                       alto: '#f97316',
-                      muy_alto: '#ef4444'
+                      critico: '#ef4444'
                     };
                     return <Cell key={`cell-${index}`} fill={colores[entry.clasificacion_nivel] || COLORES_PIE[index % COLORES_PIE.length]} />;
                   })}
@@ -312,28 +311,62 @@ export default function DashboardPage() {
 
       {/* Widgets adicionales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <WidgetAcreditacion 
-          progreso={78}
-          estandares_cumplidos={45}
-          estandares_totales={58}
-          proxima_evaluacion="Diciembre 2024"
-          alerta="3 estándares críticos pendientes"
-        />
-        <WidgetAuditorias 
-          auditorias={[
-            { nombre: 'Auditoría ISO 9001', responsable: 'Ing. Pérez', fecha: '2024-07-15' },
-            { nombre: 'Auditoría SINEACE', responsable: 'Lic. García', fecha: '2024-08-20' }
-          ]}
-        />
-        <WidgetCAPAs 
-          capas={{
-            total: 18,
-            vencidas: 3,
-            en_plazo: 12,
-            proximas_vencer: 3,
-            tasa_cumplimiento: 78
-          }}
-        />
+        {/* Widget Acreditación SINEACE - datos reales del backend */}
+        {stats?.audits?.acreditacion_sineace ? (
+          <WidgetAcreditacion 
+            progreso={parseInt(stats.audits.acreditacion_sineace.progreso) || 0}
+            estandares_cumplidos={parseInt(stats.audits.acreditacion_sineace.cumplidas) || 0}
+            estandares_totales={parseInt(stats.audits.acreditacion_sineace.total_evidencias) || 1}
+            proxima_evaluacion={stats.audits.acreditacion_sineace.proxima_evaluacion 
+              ? new Date(stats.audits.acreditacion_sineace.proxima_evaluacion).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })
+              : null}
+            alerta={parseInt(stats.audits.acreditacion_sineace.criticos) > 0 
+              ? `${stats.audits.acreditacion_sineace.criticos} estándares críticos pendientes`
+              : null}
+          />
+        ) : (
+          <div className="tarjeta">
+            <h3 className="font-semibold text-gray-800 mb-4">Cumplimiento SINEACE</h3>
+            <EmptyState tipo="general" valor={0} modulo="autoevaluaciones SINEACE" linkCrear="/acreditacion" />
+          </div>
+        )}
+
+        {/* Widget Próximas Auditorías - datos reales del backend */}
+        {(stats?.audits?.proximas?.length ?? 0) > 0 ? (
+          <WidgetAuditorias 
+            auditorias={stats.audits.proximas.map(a => ({
+              nombre: a.nombre || 'Sin título',
+              responsable: a.responsable || 'Sin asignar',
+              fecha: a.fecha
+            }))}
+          />
+        ) : (
+          <div className="tarjeta">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-800">Próximas Auditorías</h3>
+              <Link href="/auditorias" className="text-xs text-blue-600 hover:text-blue-700">Ver todas →</Link>
+            </div>
+            <EmptyState tipo="auditorias" valor={0} modulo="auditorías próximas" linkCrear="/auditorias" />
+          </div>
+        )}
+
+        {/* Widget CAPAs - datos reales del backend */}
+        {stats?.acciones?.planes ? (
+          <WidgetCAPAs 
+            capas={{
+              total: stats.acciones.planes.total,
+              vencidas: stats.acciones.planes.vencidas,
+              en_plazo: stats.acciones.planes.en_plazo,
+              proximas_vencer: stats.acciones.planes.proximas_vencer,
+              tasa_cumplimiento: stats.acciones.planes.tasa_cumplimiento
+            }}
+          />
+        ) : (
+          <div className="tarjeta">
+            <h3 className="font-semibold text-gray-800 mb-4">Acciones CAPA</h3>
+            <EmptyState tipo="acciones" valor={0} modulo="planes de acción" linkCrear="/acciones" />
+          </div>
+        )}
       </div>
 
       {/* Listas de elementos recientes */}

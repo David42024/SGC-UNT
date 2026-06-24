@@ -218,7 +218,7 @@ export default function RiesgosPage() {
                       <td className="tabla-celda text-center font-bold text-gray-700">{r.probabilidad}</td>
                       <td className="tabla-celda text-center font-bold text-gray-700">{r.impacto}</td>
                       <td className="tabla-celda text-center">
-                        <span className={clsx('badge-estado', colorNivel(r.clasificacion_nivel))}>{r.nivel_riesgo} — {r.clasificacion_nivel}</span>
+                        <span className={clsx('badge-estado', colorNivel(r.clasificacion_nivel))}>{r.probabilidad * r.impacto} — {r.clasificacion_nivel}</span>
                       </td>
                       <td className="tabla-celda text-xs text-gray-500">{r.responsable_nombre}</td>
                       <td className="tabla-celda"><Badge estado={r.estado} /></td>
