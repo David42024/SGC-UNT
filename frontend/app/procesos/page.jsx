@@ -61,6 +61,7 @@ export default function ProcesosPage() {
   const [form, setForm] = useState(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
   const [expandidos, setExpandidos] = useState({});
+  const [modalMapaVisual, setModalMapaVisual] = useState(false);
   const [erroresValidacion, setErroresValidacion] = useState({});
 
   const cargar = useCallback(async () => {
@@ -96,7 +97,7 @@ export default function ProcesosPage() {
     cargar();
   }, [cargar]);
 
-  const arbolMemoizado = useMemo(() => {
+const arbolMemoizado = useMemo(() => {
     const construirArbol = (items, padreId = null) => {
       return items
         .filter(p => p.proceso_padre_id === padreId || (padreId === null && p.proceso_padre_id === null))
@@ -105,7 +106,14 @@ export default function ProcesosPage() {
           hijos: construirArbol(items, p.id),
         }));
     };
-    return construirArbol(mapa);
+  const raices = construirArbol(mapa);
+    // Orden institucional: Estratégico (tipo_id 1) arriba, luego Misional (2), luego Soporte (3)
+    // Dentro de cada tipo, ordena por código (E01, E02, E03...)
+    return [...raices].sort((a, b) => {
+      const difTipo = (a.tipo_id ?? 99) - (b.tipo_id ?? 99);
+      if (difTipo !== 0) return difTipo;
+      return (a.codigo || '').localeCompare(b.codigo || '');
+    });
   }, [mapa]);
 
   const actualizarCampo = (campo, valor) => {
@@ -236,61 +244,63 @@ export default function ProcesosPage() {
   };
 
   // Componente Nodo del Mapa
-  const NodoMapa = ({ nodo, nivel = 0 }) => {
+const NodoMapa = ({ nodo, nivel = 0 }) => {
     const tieneHijos = nodo.hijos && nodo.hijos.length > 0;
     const expandido = expandidos[nodo.id] || false;
     const IconoNivel = ICONOS_NIVEL[nodo.nivel] || FileText;
-    
-    const coloresNivel = {
-      0: 'border-l-unt-azul bg-gradient-to-r from-unt-azul/5 to-transparent',
-      1: 'border-l-blue-400 bg-gradient-to-r from-blue-50 to-transparent',
-      2: 'border-l-gray-400',
+
+    // Color por TIPO de proceso (Estratégico/Misional/Soporte), no por profundidad
+    const coloresPorTipo = {
+      1: 'border-l-unt-azul bg-gradient-to-r from-unt-azul/5 to-transparent',   // Estratégico
+      2: 'border-l-green-500 bg-gradient-to-r from-green-50 to-transparent',    // Misional
+      3: 'border-l-amber-500 bg-gradient-to-r from-amber-50 to-transparent',   // Soporte
     };
+    const colorNodo = coloresPorTipo[nodo.tipo_id] || 'border-l-gray-400';
 
     return (
       <div className={clsx(
         'border-l-4 transition-all duration-200',
-        nivel === 0 && coloresNivel[0],
-        nivel === 1 && coloresNivel[1],
-        nivel === 2 && coloresNivel[2],
+        colorNodo,
         nivel > 0 && 'ml-6'
       )}>
         <div 
           className={clsx(
-            'flex items-center gap-3 py-3 px-4 rounded-lg transition-all duration-200 cursor-pointer group',
-            nivel === 0 ? 'hover:bg-unt-azul/10' : 'hover:bg-gray-50'
+'flex items-center gap-3 py-3 px-4 rounded-lg transition-all duration-200 cursor-pointer group',
+            'hover:bg-gray-50'
           )}
           onClick={() => tieneHijos && toggleExpandir(nodo.id)}
         >
-          {/* Indicador visual de nivel */}
+          {/* Indicador visual de TIPO de proceso */}
           <div className={clsx(
             'w-1.5 h-8 rounded-full flex-shrink-0',
-            nivel === 0 ? 'bg-unt-azul' : 
-            nivel === 1 ? 'bg-blue-400' : 
+            nodo.tipo_id === 1 ? 'bg-unt-azul' :
+            nodo.tipo_id === 2 ? 'bg-green-500' :
+            nodo.tipo_id === 3 ? 'bg-amber-500' :
             'bg-gray-400'
           )} />
-          
-          {/* Icono de nivel */}
+          {/* Icono de TIPO de proceso */}
           <IconoNivel size={18} className={clsx(
             'flex-shrink-0',
-            nivel === 0 ? 'text-unt-azul' : 
-            nivel === 1 ? 'text-blue-500' : 
+            nodo.tipo_id === 1 ? 'text-unt-azul' :
+            nodo.tipo_id === 2 ? 'text-green-600' :
+            nodo.tipo_id === 3 ? 'text-amber-600' :
             'text-gray-500'
           )} />
-          
           {/* Botón expandir/colapsar */}
           {tieneHijos && (
             <button className="p-0.5 text-gray-400 hover:text-gray-600 transition-colors">
               {expandido ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             </button>
           )}
-          
           {/* Información del proceso */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={clsx(
                 'font-semibold text-sm',
-                nivel === 0 ? 'text-unt-azul' : 'text-gray-800'
+                nodo.tipo_id === 1 ? 'text-unt-azul' :
+                nodo.tipo_id === 2 ? 'text-green-700' :
+                nodo.tipo_id === 3 ? 'text-amber-700' :
+                'text-gray-800'
               )}>
                 {nodo.codigo}
               </span>
@@ -402,13 +412,22 @@ export default function ProcesosPage() {
               para la mejora continua de la calidad educativa
             </p>
           </div>
-          <button 
-            onClick={abrirNuevo} 
-            className="flex items-center gap-2 px-5 py-2.5 bg-white text-unt-azul rounded-xl font-medium hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl"
-          >
-            <Plus size={18} />
-            Nuevo proceso
-          </button>
+<div className="flex gap-3">
+            <button
+              onClick={() => setModalMapaVisual(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white/20 text-white border border-white/30 rounded-xl font-medium hover:bg-white/30 transition-all"
+            >
+              <Grid3x3 size={18} />
+              Ver mapa visual
+            </button>
+            <button
+              onClick={abrirNuevo}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white text-unt-azul rounded-xl font-medium hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl"
+            >
+              <Plus size={18} />
+              Nuevo proceso
+            </button>
+          </div>
         </div>
       </div>
 
@@ -935,6 +954,81 @@ export default function ProcesosPage() {
         </form>
       </Modal>
 
+{/* Modal Mapa Visual institucional */}
+      <Modal
+        abierto={modalMapaVisual}
+        onCerrar={() => setModalMapaVisual(false)}
+        titulo="Mapa de Procesos del SGC — UNT (Nivel 0)"
+        size="xl"
+      >
+        <div className="overflow-x-auto">
+          <svg width="100%" viewBox="0 0 680 520" role="img">
+            <title>Mapa de Procesos SGC-UNT</title>
+            <defs>
+              <marker id="arrowM" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M2 1L8 5L2 9" fill="none" stroke="#185FA5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </marker>
+            </defs>
+            {/* Título */}
+            <text x="340" y="18" textAnchor="middle" fontSize="11" fontWeight="500" fill="#374151">Mapa de procesos del SGC — Universidad Nacional de Trujillo (Nivel 0)</text>
+            {/* ── BANDA ESTRATÉGICA ── */}
+            <rect x="60" y="30" width="560" height="126" rx="10" fill="#E6F1FB" stroke="#185FA5" strokeWidth="0.5"/>
+            <text x="340" y="48" textAnchor="middle" fontSize="12" fontWeight="500" fill="#0C447C">Procesos estratégicos</text>
+            {[['E01','Gobierno','de la univ.',68],['E02','Gestión','mejora cont.',160],['E03','Supervisión','y control',252],['E04','Gestión info.','y comunic.',344],['E05','Relaciones','inter-inst.',436],['E06','Dirección','estratégica',528]].map(([cod,l1,l2,x])=>(
+              <g key={cod}>
+                <rect x={x} y="56" width="84" height="90" rx="6" fill="#B5D4F4" stroke="#185FA5" strokeWidth="0.5"/>
+                <text x={x+42} y="92" textAnchor="middle" fontSize="11" fontWeight="500" fill="#0C447C">{cod}</text>
+                <text x={x+42} y="108" textAnchor="middle" fontSize="10" fill="#185FA5">{l1}</text>
+                <text x={x+42} y="122" textAnchor="middle" fontSize="10" fill="#185FA5">{l2}</text>
+              </g>
+            ))}
+            {/* Flecha E→M */}
+            <line x1="340" y1="156" x2="340" y2="182" stroke="#6B7280" strokeWidth="1.5" markerEnd="url(#arrowM)"/>
+            {/* ── BANDA MISIONAL ── */}
+            <rect x="100" y="184" width="480" height="120" rx="10" fill="#EAF3DE" stroke="#3B6D11" strokeWidth="0.5"/>
+            <text x="340" y="202" textAnchor="middle" fontSize="12" fontWeight="500" fill="#27500A">Procesos misionales</text>
+            {[['M01','Formación integral',112,150],['M02','Investigación, innov.','y desarrollo',270,140],['M03','Responsabilidad','social univ.',428,140]].map(([cod,l1,l2,x,w])=>(
+              <g key={cod}>
+                <rect x={x} y="210" width={w||150} height="84" rx="6" fill="#C0DD97" stroke="#3B6D11" strokeWidth="0.5"/>
+                <text x={x+(w||150)/2} y="246" textAnchor="middle" fontSize="11" fontWeight="500" fill="#27500A">{cod}</text>
+                <text x={x+(w||150)/2} y="262" textAnchor="middle" fontSize="10" fill="#3B6D11">{l1}</text>
+                {l2 && <text x={x+(w||150)/2} y="276" textAnchor="middle" fontSize="10" fill="#3B6D11">{l2}</text>}
+              </g>
+            ))}
+            {/* Flecha M→A */}
+            <line x1="340" y1="304" x2="340" y2="330" stroke="#6B7280" strokeWidth="1.5" markerEnd="url(#arrowM)"/>
+            {/* ── BANDA APOYO ── */}
+            <rect x="60" y="332" width="560" height="160" rx="10" fill="#FAEEDA" stroke="#854F0B" strokeWidth="0.5"/>
+            <text x="340" y="350" textAnchor="middle" fontSize="12" fontWeight="500" fill="#633806">Procesos de apoyo</text>
+            {[['A01','Infraestructura',68],['A02','Talento humano',174],['A03','Bienestar univ.',280],['A04','Logística',386],['A05','Mantenimiento',492]].map(([cod,lbl,x])=>(
+              <g key={cod}>
+                <rect x={x} y="358" width="98" height="54" rx="5" fill="#FAC775" stroke="#854F0B" strokeWidth="0.5"/>
+                <text x={x+49} y="381" textAnchor="middle" fontSize="11" fontWeight="500" fill="#633806">{cod}</text>
+                <text x={x+49} y="396" textAnchor="middle" fontSize="10" fill="#854F0B">{lbl}</text>
+              </g>
+            ))}
+            {[['A06','Tecnol. de info.',68,118],['A07','Asuntos jurídicos',196,118],['A08','Centros de info.',324,118],['A09','Gestión financiera',452,138]].map(([cod,lbl,x,w])=>(
+              <g key={cod}>
+                <rect x={x} y="420" width={w} height="54" rx="5" fill="#FAC775" stroke="#854F0B" strokeWidth="0.5"/>
+                <text x={x+w/2} y="443" textAnchor="middle" fontSize="11" fontWeight="500" fill="#633806">{cod}</text>
+                <text x={x+w/2} y="458" textAnchor="middle" fontSize="10" fill="#854F0B">{lbl}</text>
+              </g>
+            ))}
+            {/* Flechas laterales */}
+            <line x1="14" y1="244" x2="58" y2="244" stroke="#185FA5" strokeWidth="2" markerEnd="url(#arrowM)"/>
+            <line x1="58" y1="254" x2="14" y2="254" stroke="#185FA5" strokeWidth="2" markerEnd="url(#arrowM)"/>
+            <line x1="622" y1="244" x2="666" y2="244" stroke="#185FA5" strokeWidth="2" markerEnd="url(#arrowM)"/>
+            <line x1="666" y1="254" x2="622" y2="254" stroke="#185FA5" strokeWidth="2" markerEnd="url(#arrowM)"/>
+            {'Necesidades'.split('').map((c,i)=>(
+              <text key={i} x="7" y={170+i*14} textAnchor="middle" fontSize="9" fill="#374151">{c}</text>
+            ))}
+            {'Satisfacción'.split('').map((c,i)=>(
+              <text key={i} x="673" y={170+i*14} textAnchor="middle" fontSize="9" fill="#374151">{c}</text>
+            ))}
+          </svg>
+        </div>
+      </Modal>
+      
       <ModalConfirmar 
         abierto={modalEliminar} 
         onCerrar={() => setModalEliminar(false)} 
@@ -942,16 +1036,11 @@ export default function ProcesosPage() {
         cargando={guardando}
         titulo="¿Desactivar proceso?" 
         mensaje={
-          <div className="space-y-2">
-            <p>
-              El proceso <strong>"{seleccionado?.nombre}"</strong> ({seleccionado?.codigo}) quedará inactivo.
-            </p>
-            <p className="text-sm text-gray-500 flex items-center gap-2">
-              <AlertCircle size={16} />
-              Los subprocesos asociados seguirán visibles en el sistema.
-            </p>
-          </div>
-        } 
+          <>
+            El proceso <strong>"{seleccionado?.nombre}"</strong> ({seleccionado?.codigo}) quedará inactivo.
+            {' '}Los subprocesos asociados seguirán visibles en el sistema.
+          </>
+        }
       />
     </div>
   );
